@@ -74,7 +74,7 @@ const program = new Command();
 program
   .name("kslog")
   .description("KubeSphere 日志下载 CLI")
-  .version("0.3.0");
+  .version("0.3.1");
 
 addConnectionOptions(program);
 addDownloadOptions(program);

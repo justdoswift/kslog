@@ -3,30 +3,26 @@ import { describe, expect, it } from "vitest";
 import { formatProgressLine } from "../src/progress.js";
 
 describe("progress", () => {
-  it("renders known-total progress with percent, total, current, and speed", () => {
+  it("renders known-total progress with total, current, speed, and elapsed time", () => {
     expect(
       formatProgressLine({
         label: "历史日志",
         currentBytes: 512,
         totalBytes: 1024,
         startedAt: 0,
-        now: 1000,
-        frame: 0,
-        width: 10
+        now: 1000
       })
-    ).toBe("历史日志 [#####-----] 50.0% 512 B/1.0 KiB  512 B/s  1s");
+    ).toBe("历史日志  512 B / 1.0 KiB  速度 512B/s  已执行 1s");
   });
 
-  it("renders unknown-total progress without percent", () => {
+  it("renders unknown-total progress with current bytes, speed, and elapsed time", () => {
     expect(
       formatProgressLine({
         label: "当前日志",
         currentBytes: 2048,
         startedAt: 0,
-        now: 2000,
-        frame: 1,
-        width: 10
+        now: 2000
       })
-    ).toBe("当前日志 [-###------] 2.0 KiB  1.0 KiB/s  2s");
+    ).toBe("当前日志  2.0 KiB  速度 1KiB/s  已执行 2s");
   });
 });
