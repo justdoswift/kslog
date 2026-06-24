@@ -31,10 +31,11 @@ kslog --help
 自定义安装目录：
 
 ```bash
-KSLOG_INSTALL_DIR="$HOME/.local/share/kslog" \
-KSLOG_BIN_DIR="$HOME/.local/bin" \
-KSLOG_REF="main" \
-curl -fsSL https://raw.githubusercontent.com/justdoswift/kslog/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/justdoswift/kslog/main/install.sh | \
+  KSLOG_INSTALL_DIR="$HOME/.local/share/kslog" \
+  KSLOG_BIN_DIR="$HOME/.local/bin" \
+  KSLOG_REF="main" \
+  bash
 ```
 
 升级：
