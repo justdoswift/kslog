@@ -21,7 +21,7 @@ describe("prompts", () => {
         desiredReplicas: 0,
         readyReplicas: 0
       })
-    ).toBe("tax-data-extraction-server  工作负载(Deployment)  副本 0/0");
+    ).toBe("tax-data-extraction-server  工作负载(Deployment)  (0/0)");
   });
 
   it("shows service choices with a localized label", () => {

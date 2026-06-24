@@ -112,7 +112,7 @@ export function formatTargetChoice(target) {
     }
     const desired = target.desiredReplicas ?? 0;
     const ready = target.readyReplicas ?? 0;
-    return `${target.name}  工作负载(Deployment)  副本 ${ready}/${desired}`;
+    return `${target.name}  工作负载(Deployment)  (${ready}/${desired})`;
 }
 export async function choosePod(pods, provided) {
     if (provided) {
