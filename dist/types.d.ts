@@ -8,7 +8,7 @@ export interface LoginConfig {
     version?: string;
 }
 export interface KubeTarget {
-    kind: "Service" | "Deployment";
+    kind: "Deployment";
     name: string;
     namespace: string;
     selector: Record<string, string>;

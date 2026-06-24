@@ -54,13 +54,6 @@ interface KubeObjectMeta {
   }>;
 }
 
-interface KubeService {
-  metadata?: KubeObjectMeta;
-  spec?: {
-    selector?: Record<string, string>;
-  };
-}
-
 interface KubeDeployment {
   metadata?: KubeObjectMeta;
   spec?: {
@@ -170,38 +163,17 @@ export class KubeSphereClient {
   }
 
   async listTargets(namespace: string): Promise<KubeTarget[]> {
-    const [services, deployments] = await Promise.all([
-      this.fetchJson<KubeList<KubeService>>(`/api/v1/namespaces/${encodeURIComponent(namespace)}/services`),
-      this.fetchJson<KubeList<KubeDeployment>>(
-        `/apis/apps/v1/namespaces/${encodeURIComponent(namespace)}/deployments`
-      )
-    ]);
+    const deployments = await this.fetchJson<KubeList<KubeDeployment>>(
+      `/apis/apps/v1/namespaces/${encodeURIComponent(namespace)}/deployments`
+    );
 
     const targets: KubeTarget[] = [];
-    const serviceNames = new Set<string>();
-
-    for (const service of services.items ?? []) {
-      const name = service.metadata?.name;
-      const selector = service.spec?.selector;
-
-      if (!name || !selector || Object.keys(selector).length === 0) {
-        continue;
-      }
-
-      serviceNames.add(name);
-      targets.push({
-        kind: "Service",
-        name,
-        namespace,
-        selector
-      });
-    }
 
     for (const deployment of deployments.items ?? []) {
       const name = deployment.metadata?.name;
       const selector = deployment.spec?.selector?.matchLabels;
 
-      if (!name || !selector || Object.keys(selector).length === 0 || serviceNames.has(name)) {
+      if (!name || !selector || Object.keys(selector).length === 0) {
         continue;
       }
 
@@ -221,12 +193,10 @@ export class KubeSphereClient {
 
   async resolveTarget(namespace: string, targetName: string): Promise<KubeTarget> {
     const targets = await this.listTargets(namespace);
-    const target =
-      targets.find((item) => item.kind === "Service" && item.name === targetName) ??
-      targets.find((item) => item.name === targetName);
+    const target = targets.find((item) => item.name === targetName);
 
     if (!target) {
-      throw new Error(`在 namespace ${namespace} 中未找到服务或工作负载：${targetName}`);
+      throw new Error(`在 namespace ${namespace} 中未找到工作负载：${targetName}`);
     }
 
     return target;
@@ -248,7 +218,7 @@ export class KubeSphereClient {
   async listPodsForTarget(target: KubeTarget): Promise<PodSummary[]> {
     const pods = await this.listPods(target.namespace, target.selector);
 
-    if (pods.length > 0 || target.kind !== "Deployment") {
+    if (pods.length > 0) {
       return pods;
     }
 

@@ -1,6 +1,6 @@
 # kslog
 
-KubeSphere 日志下载命令行工具。它在本机终端登录 KubeSphere Console，加载 namespace、服务、Pod 和容器，然后下载 Kubernetes 当前保留的容器日志，或通过 exec 从 `/opt/saas-logs` 抽取历史日志。
+KubeSphere 日志下载命令行工具。它在本机终端登录 KubeSphere Console，加载 namespace、工作负载、Pod 和容器，然后下载 Kubernetes 当前保留的容器日志，或通过 exec 从 `/opt/saas-logs` 抽取历史日志。
 
 ## 一行安装
 
@@ -100,17 +100,17 @@ kslog
 kslog login-check --url http://192.168.7.191:30880 --username admin
 ```
 
-下载指定服务日志：
+下载指定工作负载日志：
 
 ```bash
 kslog download \
   --url http://192.168.7.191:30880 \
   --username admin \
   --namespace tax-digital \
-  --service tax-invoice-business-server
+  --workload tax-invoice-business-server
 ```
 
-如果不传 `--namespace`，交互列表会默认选中 `tax-digital`。如果不传 `--service`，会直接展示全部服务/工作负载供选择。
+如果不传 `--namespace`，交互列表会默认选中 `tax-digital`。如果不传 `--workload`，会直接展示全部工作负载供选择。旧参数 `--service` 仍可使用，会按工作负载名称处理。
 
 下载当前容器日志：
 
@@ -119,7 +119,7 @@ kslog current \
   --url http://192.168.7.191:30880 \
   --username admin \
   --namespace tax-digital \
-  --service tax-invoice-business-server \
+  --workload tax-invoice-business-server \
   --tail-lines 1000
 ```
 
@@ -130,7 +130,7 @@ kslog history \
   --url http://192.168.7.191:30880 \
   --username admin \
   --namespace tax-digital \
-  --service tax-invoice-business-server \
+  --workload tax-invoice-business-server \
   --date 2026-06-24
 ```
 
@@ -141,7 +141,7 @@ kslog history \
   --url http://192.168.7.191:30880 \
   --username admin \
   --namespace tax-digital \
-  --service tax-invoice-business-server \
+  --workload tax-invoice-business-server \
   --date 2026-06-24 \
   --history-file /opt/saas-logs/tax-invoice-business-server-xxx.log
 ```

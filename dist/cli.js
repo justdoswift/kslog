@@ -13,7 +13,7 @@ const program = new Command();
 program
     .name("kslog")
     .description("KubeSphere 日志下载 CLI")
-    .version("0.3.4");
+    .version("0.3.5");
 addConnectionOptions(program);
 addDownloadOptions(program);
 program.action(async (options) => {
@@ -30,7 +30,7 @@ loginCheck.action(async (options, command) => {
     console.log(`登录成功：${connection.username} @ ${connection.baseUrl}`);
     console.log(`可见 namespace 数量：${namespaces.length}`);
 });
-const download = program.command("download").description("下载指定服务/工作负载的容器日志");
+const download = program.command("download").description("下载指定工作负载的容器日志");
 addConnectionOptions(download);
 addDownloadOptions(download);
 download.action(async (options, command) => {
@@ -95,7 +95,8 @@ function addConnectionOptions(command) {
 function addDownloadOptions(command) {
     command
         .option("-n, --namespace <namespace>", "namespace")
-        .option("-s, --service <service>", "服务或工作负载名称")
+        .option("-w, --workload <workload>", "工作负载名称")
+        .option("-s, --service <service>", "工作负载名称（兼容旧参数）")
         .option("--pod <pod>", "Pod 名称")
         .option("-c, --container <container>", "容器名称")
         .addOption(new Option("--source <source>", "日志来源").choices(["current", "history"]))
@@ -136,10 +137,11 @@ async function chooseKubeTarget(client, options) {
     const namespace = await chooseNamespace(namespaces, options.namespace);
     const targets = await client.listTargets(namespace);
     if (targets.length === 0) {
-        throw new Error(`namespace ${namespace} 中没有可选择的服务/工作负载`);
+        throw new Error(`namespace ${namespace} 中没有可选择的工作负载`);
     }
-    const target = options.service
-        ? await client.resolveTarget(namespace, options.service)
+    const workloadName = options.workload ?? options.service;
+    const target = workloadName
+        ? await client.resolveTarget(namespace, workloadName)
         : await chooseTarget(targets);
     const pods = await client.listPodsForTarget(target);
     if (pods.length === 0) {
@@ -157,11 +159,10 @@ async function chooseKubeTarget(client, options) {
     };
 }
 function buildNoPodsMessage(target) {
-    if (target.kind === "Deployment" && (target.desiredReplicas ?? 0) === 0) {
+    if ((target.desiredReplicas ?? 0) === 0) {
         return `工作负载 ${target.name} 当前副本数为 0，没有可进入的 Pod；请先扩容，或切换到有运行 Pod 的环境`;
     }
-    const targetKind = target.kind === "Deployment" ? "工作负载" : "服务";
-    return `${targetKind} ${target.name} 没有匹配的 Pod`;
+    return `工作负载 ${target.name} 没有匹配的 Pod`;
 }
 async function runCurrentDownload(client, options, namespace, target, pod, container) {
     const range = await chooseLogRange({

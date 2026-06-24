@@ -145,14 +145,14 @@ export async function chooseTarget(targets: KubeTarget[], provided?: string): Pr
     const target = targets.find((item) => item.name === provided);
 
     if (!target) {
-      throw new Error(`服务或工作负载不存在：${provided}`);
+      throw new Error(`工作负载不存在：${provided}`);
     }
 
     return target;
   }
 
   return select({
-    message: "选择服务/工作负载",
+    message: "选择工作负载",
     pageSize: 15,
     choices: targets.map((target) => ({
       name: formatTargetChoice(target),
@@ -162,10 +162,6 @@ export async function chooseTarget(targets: KubeTarget[], provided?: string): Pr
 }
 
 export function formatTargetChoice(target: KubeTarget): string {
-  if (target.kind !== "Deployment") {
-    return `${target.name}  服务(Service)`;
-  }
-
   const desired = target.desiredReplicas ?? 0;
   const ready = target.readyReplicas ?? 0;
   return `${target.name}  工作负载(Deployment)  (${ready}/${desired})`;

@@ -11,7 +11,7 @@ export interface LoginConfig {
 }
 
 export interface KubeTarget {
-  kind: "Service" | "Deployment";
+  kind: "Deployment";
   name: string;
   namespace: string;
   selector: Record<string, string>;

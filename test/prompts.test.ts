@@ -24,14 +24,16 @@ describe("prompts", () => {
     ).toBe("tax-data-extraction-server  工作负载(Deployment)  (0/0)");
   });
 
-  it("shows service choices with a localized label", () => {
+  it("shows ready deployment replica counts in target choices", () => {
     expect(
       formatTargetChoice({
-        kind: "Service",
+        kind: "Deployment",
         name: "tax-invoice-business-server",
         namespace: "tax-digital",
-        selector: { app: "tax-invoice-business-server" }
+        selector: { app: "tax-invoice-business-server" },
+        desiredReplicas: 1,
+        readyReplicas: 1
       })
-    ).toBe("tax-invoice-business-server  服务(Service)");
+    ).toBe("tax-invoice-business-server  工作负载(Deployment)  (1/1)");
   });
 });
