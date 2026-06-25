@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { readFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { confirm, input, number, password as promptPassword } from "@inquirer/prompts";
@@ -13,10 +14,11 @@ import { copyToClipboard } from "./clipboard.js";
 import { buildLeqiCurl, buildLeqiExecCurlCommand, buildLeqiInvokePayload, buildLeqiReqDtoDefault, DEFAULT_LEQI_ENDPOINT, DEFAULT_LEQI_RUNNER_WORKLOAD, DEFAULT_LEQI_TAX_PAYER_NO, findLeqiReqDtoTemplate, formatLeqiReqDtoTemplateSummary, formatLeqiReqDtoTemplateSource, listLeqiApis } from "./leqi.js";
 import { REDIS_CLI_MISSING_MARKER, buildRedisCliCommand, describeRedisConnection, describeRedisOperation, autoRedisTarget, formatRedisTargetChoice, isDangerousRedisCommand, isRedisTarget, redactRedisPassword, redisServiceHost, sortRedisTargets } from "./redis.js";
 const program = new Command();
+const packageInfo = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 program
     .name("workctl")
     .description("日常工作工具集 CLI")
-    .version("0.5.1");
+    .version(packageInfo.version ?? "0.0.0");
 addConnectionOptions(program);
 addDownloadOptions(program);
 program.action(async (options) => {

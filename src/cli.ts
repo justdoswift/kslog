@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { readFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -133,11 +134,14 @@ interface RedisOptions extends ConnectionOptions, KubeTargetOptions {
 }
 
 const program = new Command();
+const packageInfo = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+  version?: string;
+};
 
 program
   .name("workctl")
   .description("日常工作工具集 CLI")
-  .version("0.5.1");
+  .version(packageInfo.version ?? "0.0.0");
 
 addConnectionOptions(program);
 addDownloadOptions(program);
