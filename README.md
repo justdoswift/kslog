@@ -5,7 +5,7 @@
 ## 一行安装
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/justdoswift/workctl/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/justdoswift/workctl/main/install-node.sh | bash
 ```
 
 默认安装到：
@@ -31,7 +31,7 @@ workctl --help
 自定义安装目录：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/justdoswift/workctl/main/install.sh | \
+curl -fsSL https://raw.githubusercontent.com/justdoswift/workctl/main/install-node.sh | \
   WORKCTL_INSTALL_DIR="$HOME/.local/share/workctl" \
   WORKCTL_BIN_DIR="$HOME/.local/bin" \
   WORKCTL_REF="main" \
@@ -41,7 +41,7 @@ curl -fsSL https://raw.githubusercontent.com/justdoswift/workctl/main/install.sh
 升级：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/justdoswift/workctl/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/justdoswift/workctl/main/install-node.sh | bash
 ```
 
 卸载程序文件：

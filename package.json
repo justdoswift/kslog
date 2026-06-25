@@ -11,7 +11,8 @@
   "files": [
     "dist",
     "README.md",
-    "install.sh"
+    "install.sh",
+    "install-node.sh"
   ],
   "bin": {
     "workctl": "./dist/cli.js"
