@@ -81,9 +81,9 @@ export async function chooseWorkctlFeature() {
     return select({
         message: "选择功能",
         choices: [
-            { name: "K8s 日志", value: "logs" },
-            { name: "乐企接口", value: "leqi" },
-            { name: "Redis 工具", value: "redis" },
+            { name: "k8s", value: "logs" },
+            { name: "乐企", value: "leqi" },
+            { name: "Redis", value: "redis" },
             { name: "退出", value: "exit" }
         ]
     });
