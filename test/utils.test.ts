@@ -52,7 +52,7 @@ describe("utils", () => {
     expect(buildLogFileName("tax-digital", "svc/name", "pod:one", date)).toBe(
       "tax-digital_svc_name_pod_one_20260624_090203.log"
     );
-    expect(defaultOutputDir(os.homedir())).toBe(path.join(os.homedir(), "Downloads", "workctl", "kubesphere-logs"));
+    expect(defaultOutputDir(os.homedir())).toBe(path.join(os.homedir(), "Downloads", "bosscli", "kubesphere-logs"));
   });
 
   it("quotes shell arguments safely", () => {

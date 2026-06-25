@@ -1,11 +1,11 @@
 {
-  "name": "workctl",
-  "version": "0.5.9",
+  "name": "bosscli",
+  "version": "0.6.0",
   "description": "Daily work toolkit CLI",
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/justdoswift/workctl.git"
+    "url": "https://github.com/justdoswift/bosscli.git"
   },
   "license": "MIT",
   "files": [
@@ -15,13 +15,13 @@
     "install-node.sh"
   ],
   "bin": {
-    "workctl": "./dist/cli.js"
+    "bosscli": "./dist/cli.js"
   },
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/cli.ts",
     "generate:leqi-templates": "python3 scripts/generate-leqi-reqdto-templates.py",
-    "workctl": "node dist/cli.js",
+    "bosscli": "node dist/cli.js",
     "test": "vitest run",
     "start": "node dist/cli.js"
   },

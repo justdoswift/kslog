@@ -94,7 +94,7 @@ export async function exportHistoryLogs(client, options) {
                     });
                 },
                 onStderr: (chunk) => {
-                    if (chunk.toString("utf8").includes("__WORKCTL_SKIP_GZIP__")) {
+                    if (chunk.toString("utf8").includes("__BOSSCLI_SKIP_GZIP__")) {
                         sawUnsupportedGzip = true;
                     }
                 }
@@ -196,7 +196,7 @@ function buildGrepCommand(file, pattern) {
         `    if command -v zgrep >/dev/null 2>&1; then`,
         `      zgrep -h -E -- "$pattern" "$file" || true`,
         `    else`,
-        `      echo "__WORKCTL_SKIP_GZIP__: zgrep not found for $file" >&2`,
+        `      echo "__BOSSCLI_SKIP_GZIP__: zgrep not found for $file" >&2`,
         `    fi`,
         `    ;;`,
         `  *)`,

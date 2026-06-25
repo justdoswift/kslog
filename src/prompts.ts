@@ -30,7 +30,7 @@ export interface ConnectionAnswers {
   insecure?: boolean;
 }
 
-export type WorkctlFeature = "logs" | "leqi" | "redis" | "exit";
+export type BosscliFeature = "logs" | "leqi" | "redis" | "exit";
 export type RedisActionChoice = RedisAction | "switch-db" | "back";
 
 export type ProfileChoice =
@@ -132,7 +132,7 @@ export function preferredNamespace(namespaces: string[], preferred = DEFAULT_NAM
   return namespaces.includes(preferred) ? preferred : namespaces[0];
 }
 
-export async function chooseWorkctlFeature(): Promise<WorkctlFeature> {
+export async function chooseBosscliFeature(): Promise<BosscliFeature> {
   return select({
     message: "选择功能",
     choices: [

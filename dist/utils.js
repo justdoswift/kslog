@@ -85,7 +85,7 @@ export function timestampForFile(date = new Date()) {
     ].join("");
 }
 export function defaultOutputDir(homeDir) {
-    return path.join(homeDir, "Downloads", "workctl", "kubesphere-logs");
+    return path.join(homeDir, "Downloads", "bosscli", "kubesphere-logs");
 }
 export function buildLogFileName(namespace, service, pod, date = new Date()) {
     return `${sanitizeFileName(namespace)}_${sanitizeFileName(service)}_${sanitizeFileName(pod)}_${timestampForFile(date)}.log`;

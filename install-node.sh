@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-OWNER="${WORKCTL_GITHUB_OWNER:-justdoswift}"
-REPO="${WORKCTL_GITHUB_REPO:-workctl}"
-REF="${WORKCTL_REF:-main}"
-INSTALL_DIR="${WORKCTL_INSTALL_DIR:-"$HOME/.workctl/cli"}"
-BIN_DIR="${WORKCTL_BIN_DIR:-"$HOME/.workctl/bin"}"
-OLD_INSTALL_DIR="$HOME/.kslog/cli"
-OLD_BIN="$HOME/.kslog/bin/kslog"
+OWNER="${BOSSCLI_GITHUB_OWNER:-justdoswift}"
+REPO="${BOSSCLI_GITHUB_REPO:-bosscli}"
+REF="${BOSSCLI_REF:-main}"
+INSTALL_DIR="${BOSSCLI_INSTALL_DIR:-"$HOME/.bosscli/cli"}"
+BIN_DIR="${BOSSCLI_BIN_DIR:-"$HOME/.bosscli/bin"}"
+OLD_WORKCTL_INSTALL_DIR="$HOME/.workctl/cli"
+OLD_WORKCTL_BIN="$HOME/.workctl/bin/workctl"
+OLD_KSLOG_INSTALL_DIR="$HOME/.kslog/cli"
+OLD_KSLOG_BIN="$HOME/.kslog/bin/kslog"
 TARBALL_URL="https://codeload.github.com/${OWNER}/${REPO}/tar.gz/${REF}"
 
 info() {
@@ -15,7 +17,7 @@ info() {
 }
 
 fail() {
-  printf 'workctl install error: %s\n' "$1" >&2
+  printf 'bosscli install error: %s\n' "$1" >&2
   exit 1
 }
 
@@ -36,8 +38,8 @@ fi
 PARENT_DIR="$(dirname "$INSTALL_DIR")"
 mkdir -p "$PARENT_DIR" "$BIN_DIR"
 
-TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/workctl-install.XXXXXX")"
-NEW_DIR="$(mktemp -d "${PARENT_DIR}/.workctl-cli.XXXXXX")"
+TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/bosscli-install.XXXXXX")"
+NEW_DIR="$(mktemp -d "${PARENT_DIR}/.bosscli-cli.XXXXXX")"
 BACKUP_DIR=""
 
 cleanup() {
@@ -52,8 +54,8 @@ cleanup() {
 trap cleanup EXIT
 
 info "Downloading ${OWNER}/${REPO}@${REF}"
-curl -fsSL "$TARBALL_URL" -o "$TMP_DIR/workctl.tar.gz"
-tar -xzf "$TMP_DIR/workctl.tar.gz" --strip-components=1 -C "$NEW_DIR"
+curl -fsSL "$TARBALL_URL" -o "$TMP_DIR/bosscli.tar.gz"
+tar -xzf "$TMP_DIR/bosscli.tar.gz" --strip-components=1 -C "$NEW_DIR"
 
 [ -f "$NEW_DIR/dist/cli.js" ] || fail "安装包缺少 dist/cli.js，请确认仓库已构建"
 [ -f "$NEW_DIR/package-lock.json" ] || fail "安装包缺少 package-lock.json"
@@ -79,21 +81,22 @@ BACKUP_DIR=""
 {
   printf '#!/usr/bin/env bash\n'
   printf 'exec node %q "$@"\n' "$INSTALL_DIR/dist/cli.js"
-} > "$BIN_DIR/workctl"
-chmod +x "$BIN_DIR/workctl"
+} > "$BIN_DIR/bosscli"
+chmod +x "$BIN_DIR/bosscli"
 
-rm -rf "$OLD_INSTALL_DIR" "$OLD_BIN"
+rm -rf "$OLD_WORKCTL_INSTALL_DIR" "$OLD_WORKCTL_BIN" "$OLD_KSLOG_INSTALL_DIR" "$OLD_KSLOG_BIN"
 
-VERSION="$("$BIN_DIR/workctl" --version)"
-info "Installed workctl ${VERSION}"
-printf 'Binary: %s\n' "$BIN_DIR/workctl"
-printf 'Profiles: %s\n' "$HOME/.workctl/profiles.json"
-printf 'Legacy profiles, if present, remain in: %s\n' "$HOME/.kslog/profiles.json"
+VERSION="$("$BIN_DIR/bosscli" --version)"
+info "Installed bosscli ${VERSION}"
+printf 'Binary: %s\n' "$BIN_DIR/bosscli"
+printf 'Profiles: %s\n' "$HOME/.bosscli/profiles.json"
+printf 'Legacy workctl profiles, if present, remain in: %s\n' "$HOME/.workctl/profiles.json"
+printf 'Legacy kslog profiles, if present, remain in: %s\n' "$HOME/.kslog/profiles.json"
 
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
   *)
-    printf '\nAdd workctl to PATH:\n'
+    printf '\nAdd bosscli to PATH:\n'
     printf '  export PATH="%s:$PATH"\n' "$BIN_DIR"
     printf '\nFor zsh, you can run:\n'
     printf '  echo '\''export PATH="%s:$PATH"'\'' >> ~/.zshrc\n' "$BIN_DIR"

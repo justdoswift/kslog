@@ -7,7 +7,7 @@ export interface ConnectionAnswers {
     password: string;
     insecure?: boolean;
 }
-export type WorkctlFeature = "logs" | "leqi" | "redis" | "exit";
+export type BosscliFeature = "logs" | "leqi" | "redis" | "exit";
 export type RedisActionChoice = RedisAction | "switch-db" | "back";
 export type ProfileChoice = {
     kind: "saved";
@@ -19,7 +19,7 @@ export declare function chooseSavedProfile(profiles: SavedProfile[], defaultProf
 export declare function promptConnection(defaults: Partial<ConnectionAnswers>): Promise<ConnectionAnswers>;
 export declare function promptNewProfileName(existingNames: string[]): Promise<string>;
 export declare function preferredNamespace(namespaces: string[], preferred?: string): string | undefined;
-export declare function chooseWorkctlFeature(): Promise<WorkctlFeature>;
+export declare function chooseBosscliFeature(): Promise<BosscliFeature>;
 export declare function chooseNamespace(namespaces: string[], provided?: string): Promise<string>;
 export declare function chooseTarget(targets: KubeTarget[], provided?: string): Promise<KubeTarget>;
 export declare function chooseRedisTargetCandidate(targets: KubeTarget[]): Promise<KubeTarget>;

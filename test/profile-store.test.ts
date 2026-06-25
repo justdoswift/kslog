@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   chooseDefaultProfile,
+  legacyProfilesPaths,
   migrateLegacyProfilesIfNeeded,
   readProfiles,
   removeProfile,
@@ -20,7 +21,7 @@ describe("profile store", () => {
   let filePath: string;
 
   beforeEach(async () => {
-    dir = await fs.mkdtemp(path.join(os.tmpdir(), "workctl-profile-"));
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), "bosscli-profile-"));
     filePath = path.join(dir, "profiles.json");
   });
 
@@ -132,6 +133,32 @@ describe("profile store", () => {
     expect(config.profiles[0]?.username).toBe("admin");
     expect(stat.mode & 0o777).toBe(0o600);
     expect(legacyContent).toContain("测试环境");
+  });
+
+  it("prefers workctl profiles before kslog profiles during migration", async () => {
+    const workctlFilePath = path.join(dir, ".workctl", "profiles.json");
+    const kslogFilePath = path.join(dir, ".kslog", "profiles.json");
+    await fs.mkdir(path.dirname(workctlFilePath), { recursive: true });
+    await fs.mkdir(path.dirname(kslogFilePath), { recursive: true });
+    await fs.writeFile(
+      workctlFilePath,
+      JSON.stringify({
+        defaultProfile: "workctl环境",
+        profiles: [{ name: "workctl环境", url: "http://workctl", username: "u", password: "p" }]
+      })
+    );
+    await fs.writeFile(
+      kslogFilePath,
+      JSON.stringify({
+        defaultProfile: "kslog环境",
+        profiles: [{ name: "kslog环境", url: "http://kslog", username: "u", password: "p" }]
+      })
+    );
+
+    await expect(migrateLegacyProfilesIfNeeded(filePath, legacyProfilesPaths(dir))).resolves.toBe(true);
+
+    const config = await readProfiles(filePath);
+    expect(config.defaultProfile).toBe("workctl环境");
   });
 
   it("does not overwrite an existing profile file during migration", async () => {

@@ -1,7 +1,10 @@
 import type { ProfilesFile, SavedProfile } from "./types.js";
 export declare function defaultProfilesPath(homeDir?: string): string;
 export declare function legacyProfilesPath(homeDir?: string): string;
-export declare function migrateLegacyProfilesIfNeeded(filePath?: string, legacyFilePath?: string): Promise<boolean>;
+export declare function workctlProfilesPath(homeDir?: string): string;
+export declare function kslogProfilesPath(homeDir?: string): string;
+export declare function legacyProfilesPaths(homeDir?: string): string[];
+export declare function migrateLegacyProfilesIfNeeded(filePath?: string, legacyFilePaths?: string | string[]): Promise<boolean>;
 export declare function readProfiles(filePath?: string): Promise<ProfilesFile>;
 export declare function writeProfiles(profilesFile: ProfilesFile, filePath?: string): Promise<void>;
 export declare function upsertProfile(input: {

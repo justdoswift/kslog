@@ -5,7 +5,7 @@ import path from "node:path";
 import { confirm, input, number, password as promptPassword, select } from "@inquirer/prompts";
 import { Command, Option } from "commander";
 import { KubeSphereClient } from "./kubesphere-client.js";
-import { buildOutputPath, chooseLeqiAction, chooseLeqiApi, chooseContainer, chooseDateSelection, chooseHistoryFiles, chooseLogRange, chooseLogSource, chooseNamespace, choosePod, chooseRedisAction, chooseRedisTargetCandidate, chooseSavedProfile, chooseTarget, chooseWorkctlFeature, promptLeqiReqDto, promptConnection, promptNewProfileName, promptRedisOperation } from "./prompts.js";
+import { buildOutputPath, chooseLeqiAction, chooseLeqiApi, chooseContainer, chooseDateSelection, chooseHistoryFiles, chooseLogRange, chooseLogSource, chooseNamespace, choosePod, chooseRedisAction, chooseRedisTargetCandidate, chooseSavedProfile, chooseTarget, chooseBosscliFeature, promptLeqiReqDto, promptConnection, promptNewProfileName, promptRedisOperation } from "./prompts.js";
 import { getProfile, readProfiles, removeProfile, setDefaultProfile, setProfileRedisConfig, setProfileRedisPassword, upsertProfile } from "./profile-store.js";
 import { exportHistoryLogs, filterHistoryFilesByService, listHistoryFiles, statHistoryFiles } from "./history-logs.js";
 import { buildLogFileName, defaultOutputDir, formatBytes, normalizeBaseUrl } from "./utils.js";
@@ -17,7 +17,7 @@ const program = new Command();
 const packageInfo = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const DEFAULT_REDIS_SERVICE_HOST = "redis.tax-component";
 program
-    .name("workctl")
+    .name("bosscli")
     .description("日常工作工具集 CLI")
     .version(packageInfo.version ?? "0.0.0");
 addConnectionOptions(program);
@@ -28,7 +28,7 @@ program.action(async (options) => {
         return;
     }
     while (true) {
-        const feature = await chooseWorkctlFeature();
+        const feature = await chooseBosscliFeature();
         if (feature === "exit") {
             return;
         }
@@ -106,7 +106,7 @@ profile.command("add").description("新增或更新环境").action(async () => {
     const password = await promptPassword({ message: "密码", mask: "*" });
     const insecure = await confirm({ message: "是否允许 https 自签名证书", default: false });
     const setDefault = await confirm({ message: "设为默认环境", default: true });
-    console.warn("提示：密码会按你的选择明文保存到 ~/.workctl/profiles.json。");
+    console.warn("提示：密码会按你的选择明文保存到 ~/.bosscli/profiles.json。");
     const saved = await upsertProfile({ name, url, username, password, insecure, setDefault });
     console.log(`已保存环境：${saved.name}`);
 });
@@ -125,10 +125,10 @@ program.parseAsync(process.argv).catch((error) => {
 });
 function addConnectionOptions(command) {
     command
-        .addOption(new Option("--profile <name>", "使用已保存的环境").env("WORKCTL_PROFILE"))
-        .addOption(new Option("--url <url>", "KubeSphere 地址，例如 http://192.168.7.191:30880").env("WORKCTL_URL"))
-        .addOption(new Option("-u, --username <username>", "用户名").env("WORKCTL_USERNAME"))
-        .addOption(new Option("-p, --password <password>", "密码").env("WORKCTL_PASSWORD"))
+        .addOption(new Option("--profile <name>", "使用已保存的环境").env("BOSSCLI_PROFILE"))
+        .addOption(new Option("--url <url>", "KubeSphere 地址，例如 http://192.168.7.191:30880").env("BOSSCLI_URL"))
+        .addOption(new Option("-u, --username <username>", "用户名").env("BOSSCLI_USERNAME"))
+        .addOption(new Option("-p, --password <password>", "密码").env("BOSSCLI_PASSWORD"))
         .option("--insecure", "允许 https 自签名证书");
 }
 function addDownloadOptions(command) {

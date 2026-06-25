@@ -1,5 +1,5 @@
 import type { KubeServiceSummary, KubeTarget } from "./types.js";
-export declare const REDIS_CLI_MISSING_MARKER = "__WORKCTL_REDIS_CLI_MISSING__";
+export declare const REDIS_CLI_MISSING_MARKER = "__BOSSCLI_REDIS_CLI_MISSING__";
 export declare const DEFAULT_REDIS_NAMESPACE = "kubesphere-system";
 export declare const DEFAULT_REDIS_WORKLOAD = "redis";
 export declare const DEFAULT_REDIS_HOST = "127.0.0.1";

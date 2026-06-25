@@ -77,7 +77,7 @@ export async function promptNewProfileName(existingNames) {
 export function preferredNamespace(namespaces, preferred = DEFAULT_NAMESPACE) {
     return namespaces.includes(preferred) ? preferred : namespaces[0];
 }
-export async function chooseWorkctlFeature() {
+export async function chooseBosscliFeature() {
     return select({
         message: "选择功能",
         choices: [

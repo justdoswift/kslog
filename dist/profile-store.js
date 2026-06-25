@@ -2,16 +2,26 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { normalizeBaseUrl } from "./utils.js";
-const CONFIG_DIR = ".workctl";
-const LEGACY_CONFIG_DIR = ".kslog";
+const CONFIG_DIR = ".bosscli";
+const WORKCTL_CONFIG_DIR = ".workctl";
+const KSLOG_CONFIG_DIR = ".kslog";
 const CONFIG_FILE = "profiles.json";
 export function defaultProfilesPath(homeDir = os.homedir()) {
     return path.join(homeDir, CONFIG_DIR, CONFIG_FILE);
 }
 export function legacyProfilesPath(homeDir = os.homedir()) {
-    return path.join(homeDir, LEGACY_CONFIG_DIR, CONFIG_FILE);
+    return workctlProfilesPath(homeDir);
 }
-export async function migrateLegacyProfilesIfNeeded(filePath = defaultProfilesPath(), legacyFilePath = legacyProfilesPath()) {
+export function workctlProfilesPath(homeDir = os.homedir()) {
+    return path.join(homeDir, WORKCTL_CONFIG_DIR, CONFIG_FILE);
+}
+export function kslogProfilesPath(homeDir = os.homedir()) {
+    return path.join(homeDir, KSLOG_CONFIG_DIR, CONFIG_FILE);
+}
+export function legacyProfilesPaths(homeDir = os.homedir()) {
+    return [workctlProfilesPath(homeDir), kslogProfilesPath(homeDir)];
+}
+export async function migrateLegacyProfilesIfNeeded(filePath = defaultProfilesPath(), legacyFilePaths = legacyProfilesPaths()) {
     try {
         await fs.access(filePath);
         return false;
@@ -22,14 +32,21 @@ export async function migrateLegacyProfilesIfNeeded(filePath = defaultProfilesPa
         }
     }
     let legacyContent;
-    try {
-        legacyContent = await fs.readFile(legacyFilePath, "utf8");
-    }
-    catch (error) {
-        if (error.code === "ENOENT") {
-            return false;
+    const candidates = Array.isArray(legacyFilePaths) ? legacyFilePaths : [legacyFilePaths];
+    for (const legacyFilePath of candidates) {
+        try {
+            legacyContent = await fs.readFile(legacyFilePath, "utf8");
+            break;
         }
-        throw error;
+        catch (error) {
+            if (error.code === "ENOENT") {
+                continue;
+            }
+            throw error;
+        }
+    }
+    if (!legacyContent) {
+        return false;
     }
     await fs.mkdir(path.dirname(filePath), { recursive: true, mode: 0o700 });
     await fs.writeFile(filePath, legacyContent, {

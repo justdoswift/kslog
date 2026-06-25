@@ -5,8 +5,9 @@ import path from "node:path";
 import type { ProfilesFile, SavedProfile } from "./types.js";
 import { normalizeBaseUrl } from "./utils.js";
 
-const CONFIG_DIR = ".workctl";
-const LEGACY_CONFIG_DIR = ".kslog";
+const CONFIG_DIR = ".bosscli";
+const WORKCTL_CONFIG_DIR = ".workctl";
+const KSLOG_CONFIG_DIR = ".kslog";
 const CONFIG_FILE = "profiles.json";
 
 export function defaultProfilesPath(homeDir = os.homedir()): string {
@@ -14,12 +15,24 @@ export function defaultProfilesPath(homeDir = os.homedir()): string {
 }
 
 export function legacyProfilesPath(homeDir = os.homedir()): string {
-  return path.join(homeDir, LEGACY_CONFIG_DIR, CONFIG_FILE);
+  return workctlProfilesPath(homeDir);
+}
+
+export function workctlProfilesPath(homeDir = os.homedir()): string {
+  return path.join(homeDir, WORKCTL_CONFIG_DIR, CONFIG_FILE);
+}
+
+export function kslogProfilesPath(homeDir = os.homedir()): string {
+  return path.join(homeDir, KSLOG_CONFIG_DIR, CONFIG_FILE);
+}
+
+export function legacyProfilesPaths(homeDir = os.homedir()): string[] {
+  return [workctlProfilesPath(homeDir), kslogProfilesPath(homeDir)];
 }
 
 export async function migrateLegacyProfilesIfNeeded(
   filePath = defaultProfilesPath(),
-  legacyFilePath = legacyProfilesPath()
+  legacyFilePaths: string | string[] = legacyProfilesPaths()
 ): Promise<boolean> {
   try {
     await fs.access(filePath);
@@ -30,15 +43,24 @@ export async function migrateLegacyProfilesIfNeeded(
     }
   }
 
-  let legacyContent: string;
-  try {
-    legacyContent = await fs.readFile(legacyFilePath, "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return false;
-    }
+  let legacyContent: string | undefined;
+  const candidates = Array.isArray(legacyFilePaths) ? legacyFilePaths : [legacyFilePaths];
 
-    throw error;
+  for (const legacyFilePath of candidates) {
+    try {
+      legacyContent = await fs.readFile(legacyFilePath, "utf8");
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  if (!legacyContent) {
+    return false;
   }
 
   await fs.mkdir(path.dirname(filePath), { recursive: true, mode: 0o700 });

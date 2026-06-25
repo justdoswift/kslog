@@ -1,58 +1,58 @@
-# workctl
+# bosscli
 
 日常工作工具集 CLI。当前支持在本机终端登录 KubeSphere Console，加载 namespace、工作负载、Pod 和容器，然后下载 Kubernetes 当前保留的容器日志，或通过 exec 从 `/opt/saas-logs` 抽取历史日志。
 
 ## 一行安装
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/justdoswift/workctl/main/install-node.sh | bash
+curl -fsSL https://raw.githubusercontent.com/justdoswift/bosscli/main/install-node.sh | bash
 ```
 
 默认安装到：
 
 ```text
-~/.workctl/cli
-~/.workctl/bin/workctl
+~/.bosscli/cli
+~/.bosscli/bin/bosscli
 ```
 
-如果安装后终端找不到 `workctl`，把下面这行加入 `~/.zshrc`：
+如果安装后终端找不到 `bosscli`，把下面这行加入 `~/.zshrc`：
 
 ```bash
-export PATH="$HOME/.workctl/bin:$PATH"
+export PATH="$HOME/.bosscli/bin:$PATH"
 ```
 
 验证安装：
 
 ```bash
-workctl --version
-workctl --help
+bosscli --version
+bosscli --help
 ```
 
 自定义安装目录：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/justdoswift/workctl/main/install-node.sh | \
-  WORKCTL_INSTALL_DIR="$HOME/.local/share/workctl" \
-  WORKCTL_BIN_DIR="$HOME/.local/bin" \
-  WORKCTL_REF="main" \
+curl -fsSL https://raw.githubusercontent.com/justdoswift/bosscli/main/install-node.sh | \
+  BOSSCLI_INSTALL_DIR="$HOME/.local/share/bosscli" \
+  BOSSCLI_BIN_DIR="$HOME/.local/bin" \
+  BOSSCLI_REF="main" \
   bash
 ```
 
 升级：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/justdoswift/workctl/main/install-node.sh | bash
+curl -fsSL https://raw.githubusercontent.com/justdoswift/bosscli/main/install-node.sh | bash
 ```
 
 卸载程序文件：
 
 ```bash
-rm -rf ~/.workctl/cli ~/.workctl/bin/workctl
+rm -rf ~/.bosscli/cli ~/.bosscli/bin/bosscli
 ```
 
-卸载不会删除 `~/.workctl/profiles.json`，避免误删已保存的环境账号。
+卸载不会删除 `~/.bosscli/profiles.json`，避免误删已保存的环境账号。
 
-从旧版 `kslog` 升级时，安装脚本会删除旧程序文件 `~/.kslog/cli` 和 `~/.kslog/bin/kslog`，但不会删除 `~/.kslog/profiles.json`。首次读取配置时，如果 `~/.workctl/profiles.json` 不存在，会自动从旧 profile 复制迁移。
+从旧版 `workctl` 或 `kslog` 升级时，安装脚本会删除旧程序文件 `~/.workctl/cli`、`~/.workctl/bin/workctl`、`~/.kslog/cli` 和 `~/.kslog/bin/kslog`，但不会删除旧 profile。首次读取配置时，如果 `~/.bosscli/profiles.json` 不存在，会优先从 `~/.workctl/profiles.json` 复制迁移；如果不存在，再从 `~/.kslog/profiles.json` 复制迁移。
 
 ## 本地开发
 
@@ -77,13 +77,13 @@ node dist/cli.js
 
 ```bash
 npm link
-workctl --help
+bosscli --help
 ```
 
 取消全局命令：
 
 ```bash
-npm unlink -g workctl
+npm unlink -g bosscli
 ```
 
 ## 使用
@@ -91,7 +91,7 @@ npm unlink -g workctl
 完整交互流程：
 
 ```bash
-workctl
+bosscli
 ```
 
 启动后会先选择功能：
@@ -101,20 +101,20 @@ workctl
 - Redis
 - 退出
 
-裸 `workctl` 的交互模式会在每个功能执行完成后回到功能选择菜单；选择 `退出` 才会结束程序。子命令直达模式仍然执行一次后退出，方便脚本使用。
+裸 `bosscli` 的交互模式会在每个功能执行完成后回到功能选择菜单；选择 `退出` 才会结束程序。子命令直达模式仍然执行一次后退出，方便脚本使用。
 
 进入 `k8s` 时，会选择已保存环境，或者选择“新增环境”。新增环境需要填写 `name/url/username/password`，登录成功后会自动保存并设为默认环境。
 
 验证登录：
 
 ```bash
-workctl login-check --url http://192.168.7.191:30880 --username admin
+bosscli login-check --url http://192.168.7.191:30880 --username admin
 ```
 
 下载指定工作负载日志：
 
 ```bash
-workctl download \
+bosscli download \
   --url http://192.168.7.191:30880 \
   --username admin \
   --namespace tax-digital \
@@ -126,7 +126,7 @@ workctl download \
 下载当前容器日志：
 
 ```bash
-workctl current \
+bosscli current \
   --url http://192.168.7.191:30880 \
   --username admin \
   --namespace tax-digital \
@@ -137,7 +137,7 @@ workctl current \
 下载历史日志，按日志内容日期抽取匹配行：
 
 ```bash
-workctl history \
+bosscli history \
   --url http://192.168.7.191:30880 \
   --username admin \
   --namespace tax-digital \
@@ -148,7 +148,7 @@ workctl history \
 如果已知远端历史日志文件，可以直接指定，避免进入多选：
 
 ```bash
-workctl history \
+bosscli history \
   --url http://192.168.7.191:30880 \
   --username admin \
   --namespace tax-digital \
@@ -162,7 +162,7 @@ workctl history \
 进入乐企接口工具：
 
 ```bash
-workctl leqi
+bosscli leqi
 ```
 
 接口列表使用内置快照，来源是 `lxzsdb.tax_leqi_api_info` 中当前启用的 131 条接口。运行时不会连接 MySQL，也不会询问接口库密码；如果接口表有变化，更新快照并发布新版本即可。
@@ -170,7 +170,7 @@ workctl leqi
 选择接口后会填写 `taxPayerNo/testMode/reqDTO`，默认操作是导出可复制 curl。`reqDTO` 会优先使用随包内置的乐企能力文档模板，并显示文档文件、章节和字段统计；没有模板时才回退为 `{}`。导出的 curl 会使用格式化 JSON，并自动复制到系统剪切板。也可以直达：
 
 ```bash
-workctl leqi \
+bosscli leqi \
   --api 200000001 \
   --tax-payer-no 91150100397352740W \
   --req-dto '{"ptbh":"1fc4107f168694d1efb5","nsrsbh":"91150100397352740W","sqlx":"1","sqed":20000000}' \
@@ -186,7 +186,7 @@ npm run generate:leqi-templates
 如果选择直接调用，工具会登录 KubeSphere，并默认进入 `tax-digital` 下的 `tax-api-proxy-server` Pod 执行集群内 curl。可用参数覆盖：
 
 ```bash
-workctl leqi \
+bosscli leqi \
   --api 200000001 \
   --tax-payer-no 91150100397352740W \
   --req-dto '{"sqed":20000000}' \
@@ -201,12 +201,12 @@ workctl leqi \
 进入 Redis 工具：
 
 ```bash
-workctl redis
+bosscli redis
 ```
 
 Redis 工具会登录 KubeSphere，自动查找可见 namespace 中的 Redis 工作负载，优先进入 `kubesphere-system / redis`，然后在 Redis Pod 内执行 `redis-cli`。执行位置只是提供集群内终端和 `redis-cli`，真正连接的 Redis 地址来自当前环境 profile 的 `redisHost/redisPort/redisDb/redisPassword`。
 
-第一次使用时会自动扫描可见 namespace 中名称包含 `redis` 的 Service，优先展示 `tax-component / redis`，选择后保存 Redis host、port、db 和密码。默认 host 是 `redis.tax-component`。这些配置会保存到当前 KubeSphere 环境 profile，后续进入同一个环境会自动复用，不再重复输入。配置文件仍是 `~/.workctl/profiles.json`，权限为 `0600`。如果保存的密码认证失败，工具会提示重新输入并覆盖保存。
+第一次使用时会自动扫描可见 namespace 中名称包含 `redis` 的 Service，优先展示 `tax-component / redis`，选择后保存 Redis host、port、db 和密码。默认 host 是 `redis.tax-component`。这些配置会保存到当前 KubeSphere 环境 profile，后续进入同一个环境会自动复用，不再重复输入。配置文件仍是 `~/.bosscli/profiles.json`，权限为 `0600`。如果保存的密码认证失败，工具会提示重新输入并覆盖保存。
 
 如果你确实要从其它 Pod 访问 Redis，也可以手动指定工作负载，并用 `--redis-host/--redis-port/--redis-db/--redis-password` 覆盖连接参数；传入 `--redis-password` 且使用已保存环境时，也会同步写入当前 profile。
 
@@ -219,7 +219,7 @@ Redis 工具会登录 KubeSphere，自动查找可见 namespace 中的 Redis 工
 也可以直达：
 
 ```bash
-workctl redis \
+bosscli redis \
   --profile 测试环境 \
   --namespace kubesphere-system \
   --workload redis \
@@ -230,16 +230,16 @@ workctl redis \
 保存环境配置：
 
 ```bash
-workctl profile add
-workctl profile list
-workctl profile use 测试环境
-workctl --profile 测试环境
+bosscli profile add
+bosscli profile list
+bosscli profile use 测试环境
+bosscli --profile 测试环境
 ```
 
 环境配置保存到：
 
 ```text
-~/.workctl/profiles.json
+~/.bosscli/profiles.json
 ```
 
 按需求，`name/url/username/password` 会明文保存到这个 JSON 文件中，文件权限会设置为 `0600`。
@@ -249,7 +249,7 @@ workctl --profile 测试环境
 默认保存到：
 
 ```text
-~/Downloads/workctl/kubesphere-logs
+~/Downloads/bosscli/kubesphere-logs
 ```
 
 不使用 `profile add` 时，密码、token、refreshToken 都只保存在当前进程内存里。
