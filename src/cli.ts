@@ -14,6 +14,7 @@ import {
   chooseContainer,
   chooseDateSelection,
   chooseHistoryFiles,
+  chooseLexiangCatalog,
   chooseLexiangInterface,
   chooseLexiangNextAction,
   chooseLexiangProfile,
@@ -85,8 +86,10 @@ import {
   buildLexiangBusinessPayloadDefault,
   buildLexiangCurl,
   formatLexiangTemplateSummary,
+  listLexiangCatalogs,
   listLexiangInterfaces
 } from "./lexiang.js";
+import type { LexiangCatalogInfo } from "./lexiang.js";
 import {
   REDIS_CLI_MISSING_MARKER,
   buildRedisCliCommand,
@@ -497,12 +500,18 @@ type LexiangFlowResult = "home" | "exit";
 
 async function runLexiangFlow(): Promise<LexiangFlowResult> {
   let profile = await resolveLexiangProfile();
+  let catalog = await chooseLexiangCatalog(listLexiangCatalogs());
 
   while (true) {
-    await runSingleLexiangCurl(profile);
+    await runSingleLexiangCurl(profile, catalog);
 
     const nextAction = await chooseLexiangNextAction();
     if (nextAction === "continue") {
+      console.log("");
+      continue;
+    }
+    if (nextAction === "switch-catalog") {
+      catalog = await chooseLexiangCatalog(listLexiangCatalogs());
       console.log("");
       continue;
     }
@@ -515,10 +524,11 @@ async function runLexiangFlow(): Promise<LexiangFlowResult> {
   }
 }
 
-async function runSingleLexiangCurl(profile: LexiangProfile): Promise<void> {
-  const api = await chooseLexiangInterface(listLexiangInterfaces());
+async function runSingleLexiangCurl(profile: LexiangProfile, catalog: LexiangCatalogInfo): Promise<void> {
+  const api = await chooseLexiangInterface(listLexiangInterfaces(catalog.value));
   const defaultPayload = buildLexiangBusinessPayloadDefault(api, profile.taxPayerNo);
 
+  console.log(`\n接口类型：${catalog.name}`);
   console.log(`\n${formatLexiangTemplateSummary(api)}\n`);
   const businessPayload = await promptLexiangBusinessPayload({ defaultPayload });
   const curlText = buildLexiangCurl({

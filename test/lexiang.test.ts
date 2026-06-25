@@ -9,6 +9,7 @@ import {
   findLexiangInterfaceByPath,
   formatLexiangTemplateSummary,
   generateLexiangNoise,
+  listLexiangCatalogs,
   listLexiangInterfaces
 } from "../src/lexiang.js";
 import type { LexiangProfile } from "../src/types.js";
@@ -25,11 +26,15 @@ const profile: LexiangProfile = {
 };
 
 describe("lexiang", () => {
-  it("loads the embedded medical interface snapshot", () => {
-    const apis = listLexiangInterfaces();
-    const outpatient = findLexiangInterfaceByPath("/api/medical/v1/rpa/10210100111");
+  it("loads separate embedded general and medical interface snapshots", () => {
+    const catalogs = listLexiangCatalogs();
+    const generalApis = listLexiangInterfaces("general");
+    const medicalApis = listLexiangInterfaces("medical");
+    const outpatient = findLexiangInterfaceByPath("/api/medical/v1/rpa/10210100111", "medical");
 
-    expect(apis).toHaveLength(10);
+    expect(catalogs.map((catalog) => catalog.name)).toEqual(["通用", "医疗"]);
+    expect(generalApis).toHaveLength(42);
+    expect(medicalApis).toHaveLength(10);
     expect(outpatient).toMatchObject({
       name: "医疗门诊全电蓝字发票开具",
       sourceDoc: "乐享协同数字化电子发票接口规范（医疗） v1.0.18.docx",
@@ -37,8 +42,25 @@ describe("lexiang", () => {
     });
   });
 
+  it("builds default business payloads with nested general invoice arrays", () => {
+    const api = findLexiangInterfaceByPath("/api/standard/v1/rpa/102101001", "general");
+
+    expect(api).toMatchObject({
+      name: "全电蓝字发票开具",
+      sourceDoc: "乐享协同数字化电子发票接口规范v1.0.62（销项）.docx",
+      sectionTitle: "3.2.1 全电蓝字发票开具"
+    });
+    const payload = buildLexiangBusinessPayloadDefault(api as NonNullable<typeof api>, profile.taxPayerNo);
+
+    expect(payload.data).toMatchObject({
+      xsfnsrsbh: profile.taxPayerNo
+    });
+    expect(JSON.stringify(payload)).toContain("\"fpmx\":[");
+    expect(JSON.stringify(payload)).toContain("\"fjys\":[");
+  });
+
   it("builds default business payloads with nested medical invoice arrays", () => {
-    const api = findLexiangInterfaceByPath("/api/medical/v1/rpa/10210100111");
+    const api = findLexiangInterfaceByPath("/api/medical/v1/rpa/10210100111", "medical");
 
     expect(api).toBeDefined();
     const payload = buildLexiangBusinessPayloadDefault(api as NonNullable<typeof api>, profile.taxPayerNo);
@@ -88,7 +110,7 @@ describe("lexiang", () => {
   });
 
   it("builds copyable REST curl commands", () => {
-    const api = findLexiangInterfaceByPath("/api/standard/v1/rpa/100101001");
+    const api = findLexiangInterfaceByPath("/api/standard/v1/rpa/100101001", "general");
 
     expect(api).toBeDefined();
     const curl = buildLexiangCurl({
@@ -107,7 +129,7 @@ describe("lexiang", () => {
   });
 
   it("formats template summaries", () => {
-    const api = findLexiangInterfaceByPath("/api/medical/v1/rpa/10210100111");
+    const api = findLexiangInterfaceByPath("/api/medical/v1/rpa/10210100111", "medical");
 
     expect(api).toBeDefined();
     const summary = formatLexiangTemplateSummary(api as NonNullable<typeof api>);

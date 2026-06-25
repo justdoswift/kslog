@@ -1,12 +1,30 @@
 import { createHash, randomUUID } from "node:crypto";
+import { LEXIANG_GENERAL_INTERFACES } from "./lexiang-general-snapshot.js";
 import { LEXIANG_MEDICAL_INTERFACES } from "./lexiang-medical-snapshot.js";
 import { joinUrl, normalizeBaseUrl, shellQuote } from "./utils.js";
 export const DEFAULT_LEXIANG_VERSION = "1.0";
-export function listLexiangInterfaces() {
-    return [...LEXIANG_MEDICAL_INTERFACES];
+const LEXIANG_CATALOGS = [
+    {
+        value: "general",
+        name: "通用",
+        description: "销项通用接口",
+        interfaces: LEXIANG_GENERAL_INTERFACES
+    },
+    {
+        value: "medical",
+        name: "医疗",
+        description: "医疗接口",
+        interfaces: LEXIANG_MEDICAL_INTERFACES
+    }
+];
+export function listLexiangCatalogs() {
+    return LEXIANG_CATALOGS.map((catalog) => ({ ...catalog }));
 }
-export function findLexiangInterfaceByPath(path) {
-    return LEXIANG_MEDICAL_INTERFACES.find((api) => api.path === path);
+export function listLexiangInterfaces(catalog = "medical") {
+    return [...getLexiangCatalog(catalog).interfaces];
+}
+export function findLexiangInterfaceByPath(path, catalog = "medical") {
+    return getLexiangCatalog(catalog).interfaces.find((api) => api.path === path);
 }
 export function formatLexiangInterfaceChoice(api) {
     const category = api.category ? `${api.category}  ` : "";
@@ -96,6 +114,13 @@ function fillBusinessDefaults(value, taxPayerNo, key) {
         return result;
     }
     return value;
+}
+function getLexiangCatalog(catalog) {
+    const found = LEXIANG_CATALOGS.find((item) => item.value === catalog);
+    if (!found) {
+        throw new Error(`未知乐享接口类型：${catalog}`);
+    }
+    return found;
 }
 function cloneJson(value) {
     return JSON.parse(JSON.stringify(value));

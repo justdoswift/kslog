@@ -1,5 +1,6 @@
 import type { DateSelection, HistoryLogFile, LexiangBusinessPayload, LexiangInterfaceInfo, LexiangProfile, KubeTarget, LeqiAction, LeqiApiInfo, LeqiReqDto, LogRange, LogSource, PodSummary, SavedProfile } from "./types.js";
 import { type RedisAction, type RedisConnection, type RedisOperation } from "./redis.js";
+import { type LexiangCatalogInfo } from "./lexiang.js";
 export declare const DEFAULT_NAMESPACE = "tax-digital";
 export interface ConnectionAnswers {
     baseUrl: string;
@@ -9,7 +10,7 @@ export interface ConnectionAnswers {
 }
 export type BosscliFeature = "logs" | "leqi" | "lexiang" | "leqi-sm4" | "get-hash-code" | "redis" | "middle-db-mock" | "exit";
 export type RedisActionChoice = RedisAction | "switch-db" | "back";
-export type LexiangNextAction = "continue" | "switch-profile" | "home" | "exit";
+export type LexiangNextAction = "continue" | "switch-catalog" | "switch-profile" | "home" | "exit";
 export type ProfileChoice = {
     kind: "saved";
     profile: SavedProfile;
@@ -28,6 +29,7 @@ export declare function promptNewProfileName(existingNames: string[]): Promise<s
 export declare function preferredNamespace(namespaces: string[], preferred?: string): string | undefined;
 export declare function chooseBosscliFeature(defaultFeature?: BosscliFeature): Promise<BosscliFeature>;
 export declare function chooseLexiangProfile(profiles: LexiangProfile[], defaultProfile?: string): Promise<LexiangProfileChoice>;
+export declare function chooseLexiangCatalog(catalogs: LexiangCatalogInfo[]): Promise<LexiangCatalogInfo>;
 export declare function promptLexiangProfile(options: {
     existingNames: string[];
 }): Promise<{

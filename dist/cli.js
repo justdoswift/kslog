@@ -5,7 +5,7 @@ import path from "node:path";
 import { confirm, input, number, password as promptPassword, select } from "@inquirer/prompts";
 import { Command, Option } from "commander";
 import { KubeSphereClient } from "./kubesphere-client.js";
-import { buildOutputPath, chooseLeqiAction, chooseLeqiApi, chooseContainer, chooseDateSelection, chooseHistoryFiles, chooseLexiangInterface, chooseLexiangNextAction, chooseLexiangProfile, chooseLogRange, chooseLogSource, chooseNamespace, choosePod, chooseRedisAction, chooseRedisTargetCandidate, chooseSavedProfile, chooseTarget, chooseBosscliFeature, promptLexiangBusinessPayload, promptLexiangProfile, promptLeqiReqDto, promptConnection, promptNewProfileName, promptRedisOperation } from "./prompts.js";
+import { buildOutputPath, chooseLeqiAction, chooseLeqiApi, chooseContainer, chooseDateSelection, chooseHistoryFiles, chooseLexiangCatalog, chooseLexiangInterface, chooseLexiangNextAction, chooseLexiangProfile, chooseLogRange, chooseLogSource, chooseNamespace, choosePod, chooseRedisAction, chooseRedisTargetCandidate, chooseSavedProfile, chooseTarget, chooseBosscliFeature, promptLexiangBusinessPayload, promptLexiangProfile, promptLeqiReqDto, promptConnection, promptNewProfileName, promptRedisOperation } from "./prompts.js";
 import { getProfile, readProfiles, removeProfile, setDefaultProfile, setProfileRedisConfig, setProfileRedisPassword, upsertProfile } from "./profile-store.js";
 import { readLexiangProfiles, upsertLexiangProfile } from "./lexiang-profile-store.js";
 import { exportHistoryLogs, filterHistoryFilesByService, listHistoryFiles, statHistoryFiles } from "./history-logs.js";
@@ -13,7 +13,7 @@ import { buildLogFileName, defaultOutputDir, formatBytes, normalizeBaseUrl } fro
 import { ProgressBar } from "./progress.js";
 import { copyToClipboard } from "./clipboard.js";
 import { buildLeqiCurl, buildLeqiExecCurlCommand, buildLeqiInvokePayload, buildLeqiReqDtoDefault, DEFAULT_LEQI_ENDPOINT, DEFAULT_LEQI_RUNNER_WORKLOAD, DEFAULT_LEQI_TAX_PAYER_NO, findLeqiReqDtoTemplate, formatLeqiReqDtoTemplateSummary, formatLeqiReqDtoTemplateSource, listLeqiApis } from "./leqi.js";
-import { buildLexiangBusinessPayloadDefault, buildLexiangCurl, formatLexiangTemplateSummary, listLexiangInterfaces } from "./lexiang.js";
+import { buildLexiangBusinessPayloadDefault, buildLexiangCurl, formatLexiangTemplateSummary, listLexiangCatalogs, listLexiangInterfaces } from "./lexiang.js";
 import { REDIS_CLI_MISSING_MARKER, buildRedisCliCommand, describeRedisConnection, describeRedisOperation, autoRedisTarget, formatRedisTargetChoice, isDangerousRedisCommand, isRedisAuthFailureOutput, isRedisTarget, formatRedisServiceChoice, preferredRedisServicePort, redisServiceDnsName, redactRedisPassword, redisServiceHost, sortRedisServices, sortRedisTargets } from "./redis.js";
 import { openUrl } from "./open-url.js";
 const program = new Command();
@@ -305,10 +305,16 @@ async function runLeqiFlow(options) {
 }
 async function runLexiangFlow() {
     let profile = await resolveLexiangProfile();
+    let catalog = await chooseLexiangCatalog(listLexiangCatalogs());
     while (true) {
-        await runSingleLexiangCurl(profile);
+        await runSingleLexiangCurl(profile, catalog);
         const nextAction = await chooseLexiangNextAction();
         if (nextAction === "continue") {
+            console.log("");
+            continue;
+        }
+        if (nextAction === "switch-catalog") {
+            catalog = await chooseLexiangCatalog(listLexiangCatalogs());
             console.log("");
             continue;
         }
@@ -320,9 +326,10 @@ async function runLexiangFlow() {
         return nextAction;
     }
 }
-async function runSingleLexiangCurl(profile) {
-    const api = await chooseLexiangInterface(listLexiangInterfaces());
+async function runSingleLexiangCurl(profile, catalog) {
+    const api = await chooseLexiangInterface(listLexiangInterfaces(catalog.value));
     const defaultPayload = buildLexiangBusinessPayloadDefault(api, profile.taxPayerNo);
+    console.log(`\n接口类型：${catalog.name}`);
     console.log(`\n${formatLexiangTemplateSummary(api)}\n`);
     const businessPayload = await promptLexiangBusinessPayload({ defaultPayload });
     const curlText = buildLexiangCurl({

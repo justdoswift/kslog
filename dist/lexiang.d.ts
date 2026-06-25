@@ -1,13 +1,21 @@
 import type { LexiangBusinessPayload, LexiangInterfaceInfo, LexiangProfile } from "./types.js";
 export declare const DEFAULT_LEXIANG_VERSION = "1.0";
+export type LexiangCatalog = "general" | "medical";
+export interface LexiangCatalogInfo {
+    value: LexiangCatalog;
+    name: string;
+    description: string;
+    interfaces: readonly LexiangInterfaceInfo[];
+}
 export interface LexiangRequestBody {
     data: string;
     noise: string;
     version: string;
     sign: string;
 }
-export declare function listLexiangInterfaces(): LexiangInterfaceInfo[];
-export declare function findLexiangInterfaceByPath(path: string): LexiangInterfaceInfo | undefined;
+export declare function listLexiangCatalogs(): LexiangCatalogInfo[];
+export declare function listLexiangInterfaces(catalog?: LexiangCatalog): LexiangInterfaceInfo[];
+export declare function findLexiangInterfaceByPath(path: string, catalog?: LexiangCatalog): LexiangInterfaceInfo | undefined;
 export declare function formatLexiangInterfaceChoice(api: LexiangInterfaceInfo): string;
 export declare function formatLexiangTemplateSummary(api: LexiangInterfaceInfo): string;
 export declare function parseLexiangBusinessPayloadJson(value: string): LexiangBusinessPayload;

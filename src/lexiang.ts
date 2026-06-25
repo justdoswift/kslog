@@ -1,10 +1,19 @@
 import { createHash, randomUUID } from "node:crypto";
 
+import { LEXIANG_GENERAL_INTERFACES } from "./lexiang-general-snapshot.js";
 import { LEXIANG_MEDICAL_INTERFACES } from "./lexiang-medical-snapshot.js";
 import type { JsonValue, LexiangBusinessPayload, LexiangInterfaceInfo, LexiangProfile } from "./types.js";
 import { joinUrl, normalizeBaseUrl, shellQuote } from "./utils.js";
 
 export const DEFAULT_LEXIANG_VERSION = "1.0";
+export type LexiangCatalog = "general" | "medical";
+
+export interface LexiangCatalogInfo {
+  value: LexiangCatalog;
+  name: string;
+  description: string;
+  interfaces: readonly LexiangInterfaceInfo[];
+}
 
 export interface LexiangRequestBody {
   data: string;
@@ -13,12 +22,34 @@ export interface LexiangRequestBody {
   sign: string;
 }
 
-export function listLexiangInterfaces(): LexiangInterfaceInfo[] {
-  return [...LEXIANG_MEDICAL_INTERFACES];
+const LEXIANG_CATALOGS: readonly LexiangCatalogInfo[] = [
+  {
+    value: "general",
+    name: "通用",
+    description: "销项通用接口",
+    interfaces: LEXIANG_GENERAL_INTERFACES
+  },
+  {
+    value: "medical",
+    name: "医疗",
+    description: "医疗接口",
+    interfaces: LEXIANG_MEDICAL_INTERFACES
+  }
+];
+
+export function listLexiangCatalogs(): LexiangCatalogInfo[] {
+  return LEXIANG_CATALOGS.map((catalog) => ({ ...catalog }));
 }
 
-export function findLexiangInterfaceByPath(path: string): LexiangInterfaceInfo | undefined {
-  return LEXIANG_MEDICAL_INTERFACES.find((api) => api.path === path);
+export function listLexiangInterfaces(catalog: LexiangCatalog = "medical"): LexiangInterfaceInfo[] {
+  return [...getLexiangCatalog(catalog).interfaces];
+}
+
+export function findLexiangInterfaceByPath(
+  path: string,
+  catalog: LexiangCatalog = "medical"
+): LexiangInterfaceInfo | undefined {
+  return getLexiangCatalog(catalog).interfaces.find((api) => api.path === path);
 }
 
 export function formatLexiangInterfaceChoice(api: LexiangInterfaceInfo): string {
@@ -146,6 +177,14 @@ function fillBusinessDefaults(value: JsonValue, taxPayerNo: string, key?: string
   }
 
   return value;
+}
+
+function getLexiangCatalog(catalog: LexiangCatalog): LexiangCatalogInfo {
+  const found = LEXIANG_CATALOGS.find((item) => item.value === catalog);
+  if (!found) {
+    throw new Error(`未知乐享接口类型：${catalog}`);
+  }
+  return found;
 }
 
 function cloneJson<T extends JsonValue>(value: T): T {

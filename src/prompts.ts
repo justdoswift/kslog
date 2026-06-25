@@ -24,6 +24,7 @@ import { formatLeqiApiChoice, parseReqDtoJson } from "./leqi.js";
 import {
   DEFAULT_LEXIANG_VERSION,
   formatLexiangInterfaceChoice,
+  type LexiangCatalogInfo,
   parseLexiangBusinessPayloadJson
 } from "./lexiang.js";
 import { buildLogFileName, defaultOutputDir, formatBytes, normalizeBaseUrl } from "./utils.js";
@@ -48,7 +49,7 @@ export type BosscliFeature =
   | "middle-db-mock"
   | "exit";
 export type RedisActionChoice = RedisAction | "switch-db" | "back";
-export type LexiangNextAction = "continue" | "switch-profile" | "home" | "exit";
+export type LexiangNextAction = "continue" | "switch-catalog" | "switch-profile" | "home" | "exit";
 
 export type ProfileChoice =
   | {
@@ -207,6 +208,21 @@ export async function chooseLexiangProfile(
   return { kind: "saved", profile };
 }
 
+export async function chooseLexiangCatalog(catalogs: LexiangCatalogInfo[]): Promise<LexiangCatalogInfo> {
+  if (catalogs.length === 0) {
+    throw new Error("没有可用的乐享接口类型");
+  }
+
+  return select({
+    message: "选择乐享接口类型",
+    default: catalogs[0],
+    choices: catalogs.map((catalog) => ({
+      name: `${catalog.name}  ${catalog.description}`,
+      value: catalog
+    }))
+  });
+}
+
 export async function promptLexiangProfile(options: {
   existingNames: string[];
 }): Promise<{
@@ -323,6 +339,7 @@ export async function chooseLexiangNextAction(): Promise<LexiangNextAction> {
     default: "continue",
     choices: [
       { name: "继续生成乐享 curl", value: "continue" },
+      { name: "切换通用/医疗", value: "switch-catalog" },
       { name: "切换乐享环境", value: "switch-profile" },
       { name: "返回首页", value: "home" },
       { name: "退出", value: "exit" }
