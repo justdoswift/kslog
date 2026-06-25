@@ -8,7 +8,7 @@ export interface ConnectionAnswers {
     insecure?: boolean;
 }
 export type WorkctlFeature = "logs" | "leqi" | "redis" | "exit";
-export type RedisActionChoice = RedisAction | "back";
+export type RedisActionChoice = RedisAction | "switch-db" | "back";
 export type ProfileChoice = {
     kind: "saved";
     profile: SavedProfile;

@@ -214,7 +214,7 @@ Redis 工具会登录 KubeSphere，自动查找可见 namespace 中的 Redis 工
 
 支持的操作包括 `PING`、`INFO`、`GET key`、`SCAN pattern` 和自定义命令。自定义命令如果包含常见写操作（如 `DEL`、`SET`、`HSET`、`EXPIRE`、`FLUSHDB`）会要求二次确认。
 
-交互模式下每次 Redis 命令执行完成后会回到 `选择 Redis 操作` 菜单，方便连续查询；选择 `返回上一级` 可离开 Redis 工具。命令行直达模式，例如传入 `--redis-action`，仍然执行一次后退出，方便脚本使用。
+交互模式下每次 Redis 命令执行完成后会回到 `选择 Redis 操作` 菜单，方便连续查询；可以选择 `切换 database` 在当前 Redis 连接中切换 DB，默认是 `0`，切换后会保存到当前 profile。选择 `返回上一级` 可离开 Redis 工具。命令行直达模式，例如传入 `--redis-action`，仍然执行一次后退出，方便脚本使用。
 
 也可以直达：
 

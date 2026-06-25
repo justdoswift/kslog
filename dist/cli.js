@@ -285,6 +285,11 @@ async function runRedisFlow(options) {
         if (action === "back") {
             return;
         }
+        if (action === "switch-db") {
+            await switchRedisDatabase(redisConnection, profileName);
+            console.log("");
+            continue;
+        }
         const operation = await promptRedisOperation({
             action,
             key: oneShot ? options.key : undefined,
@@ -306,6 +311,23 @@ async function runRedisFlow(options) {
         }
         console.log("");
     } while (true);
+}
+async function switchRedisDatabase(redisConnection, profileName) {
+    const redisDb = await number({
+        message: "Redis db",
+        default: redisConnection.db ?? 0,
+        min: 0,
+        required: true
+    });
+    redisConnection.db = redisDb;
+    if (profileName) {
+        await setProfileRedisConfig(profileName, { redisDb });
+        console.log(`已切换并保存 Redis db：${redisDb}`);
+    }
+    else {
+        console.log(`已切换 Redis db：${redisDb}`);
+    }
+    console.log(`Redis：${describeRedisConnection(redisConnection)}`);
 }
 async function runRedisOperation(options) {
     const { client, namespace, target, pod, container, redisConnection, operation, profileName } = options;

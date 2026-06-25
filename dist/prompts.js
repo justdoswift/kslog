@@ -321,6 +321,7 @@ export async function chooseRedisAction(provided) {
             { name: "GET key", value: "get" },
             { name: "SCAN pattern", value: "scan" },
             { name: "执行自定义命令", value: "custom" },
+            { name: "切换 database", value: "switch-db" },
             { name: "返回上一级", value: "back" }
         ],
         default: "ping"
