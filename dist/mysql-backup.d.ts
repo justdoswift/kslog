@@ -9,6 +9,9 @@ export interface MySqlCommandSpec {
     command: string;
     args: string[];
 }
+export interface CommandRunOptions {
+    env?: NodeJS.ProcessEnv;
+}
 export interface MySqlBackupResult {
     transferredBytes: number;
     copiedTables: number;
@@ -30,6 +33,7 @@ export declare function assertDatabaseName(value: string, label?: string): void;
 export declare function escapeIdentifier(value: string): string;
 export declare function escapeSqlString(value: string): string;
 export declare function buildMySqlEnv(connection: MySqlConnection, baseEnv?: NodeJS.ProcessEnv): NodeJS.ProcessEnv;
+export declare function buildMySqlClientEnv(baseEnv?: NodeJS.ProcessEnv): NodeJS.ProcessEnv;
 export declare function buildMysqlCommand(connection: Omit<MySqlConnection, "password">, options?: {
     sql?: string;
     database?: string;
@@ -42,3 +46,7 @@ export declare function buildCreateDatabaseSql(database: string, defaults: {
     collation: string;
 }): string;
 export declare function countTables(connection: MySqlConnection, database: string): Promise<number>;
+export declare function listMissingMySqlClientCommands(): Promise<string[]>;
+export declare function ensureMySqlCommandsAvailable(): Promise<void>;
+export declare function commandIsAvailable(command: string, env?: NodeJS.ProcessEnv): Promise<boolean>;
+export declare function buildHomebrewInstallMysqlClientCommand(): MySqlCommandSpec;

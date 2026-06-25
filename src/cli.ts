@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -119,6 +120,9 @@ import {
 import {
   DEFAULT_MYSQL_PORT,
   backupMySqlDatabase,
+  buildHomebrewInstallMysqlClientCommand,
+  commandIsAvailable,
+  listMissingMySqlClientCommands,
   type MySqlConnection
 } from "./mysql-backup.js";
 import { openUrl } from "./open-url.js";
@@ -641,6 +645,7 @@ async function runMySqlBackupFlow(options: MySqlBackupCliOptions): Promise<void>
   console.log(`连接：${connection.username}@${connection.host}:${connection.port}`);
   console.log(`source：${source}`);
   console.log(`dest：${dest}`);
+  await ensureMySqlClientCommandsInteractively();
   const confirmed = await confirm({ message: "确认开始备份？", default: true });
   if (!confirmed) {
     console.log("已取消 MySQL 备份");
@@ -672,6 +677,58 @@ async function runMySqlBackupFlow(options: MySqlBackupCliOptions): Promise<void>
     }
     throw error;
   }
+}
+
+async function ensureMySqlClientCommandsInteractively(): Promise<void> {
+  const missing = await listMissingMySqlClientCommands();
+  if (missing.length === 0) {
+    return;
+  }
+
+  console.warn(`缺少 MySQL 客户端命令：${missing.join("、")}`);
+  if (process.platform !== "darwin") {
+    throw new Error("请先安装 mysql-client，并确保 mysql 和 mysqldump 在 PATH 中。");
+  }
+  if (!(await commandIsAvailable("brew"))) {
+    throw new Error("找不到 Homebrew，无法自动安装 mysql-client。请先安装 Homebrew 或手动安装 mysql-client。");
+  }
+
+  const shouldInstall = await confirm({
+    message: "是否自动执行 brew install mysql-client？",
+    default: true
+  });
+  if (!shouldInstall) {
+    throw new Error("已取消自动安装 mysql-client。");
+  }
+
+  const installCommand = buildHomebrewInstallMysqlClientCommand();
+  console.log(`执行安装：${installCommand.command} ${installCommand.args.join(" ")}`);
+  await runInheritedCommand(installCommand.command, installCommand.args);
+
+  const remaining = await listMissingMySqlClientCommands();
+  if (remaining.length > 0) {
+    throw new Error(
+      `mysql-client 安装完成，但仍找不到 ${remaining.join("、")}。请确认 Homebrew mysql-client 已加入 PATH。`
+    );
+  }
+  console.log("mysql-client 已可用，继续备份。");
+}
+
+function runInheritedCommand(command: string, args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      env: process.env,
+      stdio: "inherit"
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(`${command} ${args.join(" ")} 执行失败，退出码 ${code ?? 1}`));
+    });
+  });
 }
 
 async function resolveMySqlConnection(options: MySqlBackupCliOptions): Promise<{

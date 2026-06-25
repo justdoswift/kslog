@@ -5,6 +5,10 @@ import { pipeline } from "node:stream/promises";
 export const DEFAULT_MYSQL_PORT = 3306;
 const MYSQL_COMMAND = "mysql";
 const MYSQLDUMP_COMMAND = "mysqldump";
+const HOMEBREW_MYSQL_CLIENT_BINS = [
+  "/opt/homebrew/opt/mysql-client/bin",
+  "/usr/local/opt/mysql-client/bin"
+];
 
 export interface MySqlConnection {
   host: string;
@@ -16,6 +20,10 @@ export interface MySqlConnection {
 export interface MySqlCommandSpec {
   command: string;
   args: string[];
+}
+
+export interface CommandRunOptions {
+  env?: NodeJS.ProcessEnv;
 }
 
 export interface MySqlBackupResult {
@@ -57,9 +65,27 @@ export function escapeSqlString(value: string): string {
 }
 
 export function buildMySqlEnv(connection: MySqlConnection, baseEnv: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const pathValue = [
+    ...HOMEBREW_MYSQL_CLIENT_BINS,
+    baseEnv.PATH
+  ].filter(Boolean).join(":");
+
   return {
     ...baseEnv,
+    PATH: pathValue,
     MYSQL_PWD: connection.password
+  };
+}
+
+export function buildMySqlClientEnv(baseEnv: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const pathValue = [
+    ...HOMEBREW_MYSQL_CLIENT_BINS,
+    baseEnv.PATH
+  ].filter(Boolean).join(":");
+
+  return {
+    ...baseEnv,
+    PATH: pathValue
   };
 }
 
@@ -192,9 +218,35 @@ async function databaseDefaults(
   };
 }
 
-async function ensureMySqlCommandsAvailable(): Promise<void> {
-  await runCommand({ command: MYSQL_COMMAND, args: ["--version"] }, undefined);
-  await runCommand({ command: MYSQLDUMP_COMMAND, args: ["--version"] }, undefined);
+export async function listMissingMySqlClientCommands(): Promise<string[]> {
+  const checks = await Promise.all([
+    commandIsAvailable(MYSQL_COMMAND, buildMySqlClientEnv()),
+    commandIsAvailable(MYSQLDUMP_COMMAND, buildMySqlClientEnv())
+  ]);
+  return [
+    checks[0] ? undefined : MYSQL_COMMAND,
+    checks[1] ? undefined : MYSQLDUMP_COMMAND
+  ].filter((value): value is string => Boolean(value));
+}
+
+export async function ensureMySqlCommandsAvailable(): Promise<void> {
+  const missing = await listMissingMySqlClientCommands();
+  if (missing.length > 0) {
+    throw new Error(`找不到 ${missing.join("、")} 命令，请先安装 mysql-client`);
+  }
+}
+
+export async function commandIsAvailable(command: string, env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
+  try {
+    await runCommand({ command, args: ["--version"] }, undefined, { env });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function buildHomebrewInstallMysqlClientCommand(): MySqlCommandSpec {
+  return { command: "brew", args: ["install", "mysql-client"] };
 }
 
 async function runMysqlSql(connection: MySqlConnection, sql: string): Promise<string> {
@@ -292,9 +344,13 @@ function startTableCountPoller(
   };
 }
 
-async function runCommand(spec: MySqlCommandSpec, connection: MySqlConnection | undefined): Promise<string> {
+async function runCommand(
+  spec: MySqlCommandSpec,
+  connection: MySqlConnection | undefined,
+  options: CommandRunOptions = {}
+): Promise<string> {
   const child = spawn(spec.command, spec.args, {
-    env: connection ? buildMySqlEnv(connection) : process.env,
+    env: connection ? buildMySqlEnv(connection, options.env ?? process.env) : (options.env ?? buildMySqlClientEnv()),
     stdio: ["ignore", "pipe", "pipe"]
   });
   const stdout = collectStreamText(child.stdout);

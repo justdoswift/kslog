@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildCreateDatabaseSql,
+  buildHomebrewInstallMysqlClientCommand,
+  buildMySqlClientEnv,
   buildMySqlEnv,
   buildMysqlCommand,
   buildMysqldumpCommand,
@@ -56,13 +58,25 @@ describe("mysql backup", () => {
     const env = buildMySqlEnv(connection, { PATH: "/bin" });
 
     expect(env.MYSQL_PWD).toBe(connection.password);
-    expect(env.PATH).toBe("/bin");
+    expect(env.PATH).toContain("/bin");
+    expect(env.PATH).toContain("/opt/homebrew/opt/mysql-client/bin");
   });
 
   it("supports empty passwords in MYSQL_PWD env", () => {
     const env = buildMySqlEnv({ ...connection, password: "" }, { PATH: "/bin" });
 
     expect(env.MYSQL_PWD).toBe("");
+  });
+
+  it("adds Homebrew mysql-client paths and builds install command", () => {
+    const env = buildMySqlClientEnv({ PATH: "/bin" });
+
+    expect(env.PATH).toContain("/opt/homebrew/opt/mysql-client/bin");
+    expect(env.PATH).toContain("/usr/local/opt/mysql-client/bin");
+    expect(buildHomebrewInstallMysqlClientCommand()).toEqual({
+      command: "brew",
+      args: ["install", "mysql-client"]
+    });
   });
 
   it("rejects missing source and existing dest during preflight", () => {

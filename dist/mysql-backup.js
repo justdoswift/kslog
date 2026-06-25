@@ -4,6 +4,10 @@ import { pipeline } from "node:stream/promises";
 export const DEFAULT_MYSQL_PORT = 3306;
 const MYSQL_COMMAND = "mysql";
 const MYSQLDUMP_COMMAND = "mysqldump";
+const HOMEBREW_MYSQL_CLIENT_BINS = [
+    "/opt/homebrew/opt/mysql-client/bin",
+    "/usr/local/opt/mysql-client/bin"
+];
 export function isValidDatabaseName(value) {
     return /^[A-Za-z0-9_$]+$/.test(value);
 }
@@ -20,9 +24,24 @@ export function escapeSqlString(value) {
     return `'${value.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
 }
 export function buildMySqlEnv(connection, baseEnv = process.env) {
+    const pathValue = [
+        ...HOMEBREW_MYSQL_CLIENT_BINS,
+        baseEnv.PATH
+    ].filter(Boolean).join(":");
     return {
         ...baseEnv,
+        PATH: pathValue,
         MYSQL_PWD: connection.password
+    };
+}
+export function buildMySqlClientEnv(baseEnv = process.env) {
+    const pathValue = [
+        ...HOMEBREW_MYSQL_CLIENT_BINS,
+        baseEnv.PATH
+    ].filter(Boolean).join(":");
+    return {
+        ...baseEnv,
+        PATH: pathValue
     };
 }
 export function buildMysqlCommand(connection, options = {}) {
@@ -132,9 +151,33 @@ async function databaseDefaults(connection, database) {
         collation: collation || "utf8mb4_0900_ai_ci"
     };
 }
-async function ensureMySqlCommandsAvailable() {
-    await runCommand({ command: MYSQL_COMMAND, args: ["--version"] }, undefined);
-    await runCommand({ command: MYSQLDUMP_COMMAND, args: ["--version"] }, undefined);
+export async function listMissingMySqlClientCommands() {
+    const checks = await Promise.all([
+        commandIsAvailable(MYSQL_COMMAND, buildMySqlClientEnv()),
+        commandIsAvailable(MYSQLDUMP_COMMAND, buildMySqlClientEnv())
+    ]);
+    return [
+        checks[0] ? undefined : MYSQL_COMMAND,
+        checks[1] ? undefined : MYSQLDUMP_COMMAND
+    ].filter((value) => Boolean(value));
+}
+export async function ensureMySqlCommandsAvailable() {
+    const missing = await listMissingMySqlClientCommands();
+    if (missing.length > 0) {
+        throw new Error(`找不到 ${missing.join("、")} 命令，请先安装 mysql-client`);
+    }
+}
+export async function commandIsAvailable(command, env = process.env) {
+    try {
+        await runCommand({ command, args: ["--version"] }, undefined, { env });
+        return true;
+    }
+    catch {
+        return false;
+    }
+}
+export function buildHomebrewInstallMysqlClientCommand() {
+    return { command: "brew", args: ["install", "mysql-client"] };
 }
 async function runMysqlSql(connection, sql) {
     return runCommand(buildMysqlCommand(connection, { sql }), connection);
@@ -215,9 +258,9 @@ function startTableCountPoller(connection, database, onCount) {
         stop: () => clearInterval(timer)
     };
 }
-async function runCommand(spec, connection) {
+async function runCommand(spec, connection, options = {}) {
     const child = spawn(spec.command, spec.args, {
-        env: connection ? buildMySqlEnv(connection) : process.env,
+        env: connection ? buildMySqlEnv(connection, options.env ?? process.env) : (options.env ?? buildMySqlClientEnv()),
         stdio: ["ignore", "pipe", "pipe"]
     });
     const stdout = collectStreamText(child.stdout);

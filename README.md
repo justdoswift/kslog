@@ -277,6 +277,8 @@ bosscli mysql-backup
 
 MySQL 备份用于把同一 MySQL 实例里的 `source` 数据库复制到新的 `dest` 数据库。工具会使用本机 `mysql` 和 `mysqldump` 命令执行，不引入额外数据库驱动。第一次使用时会新增 MySQL 环境并明文保存到 `~/.bosscli/mysql-profiles.json`，权限为 `0600`。
 
+如果本机缺少 `mysql` 或 `mysqldump`，macOS 上会提示是否自动执行 `brew install mysql-client`；安装完成后会继续当前备份。工具也会自动识别 Homebrew 的 `mysql-client` keg-only 路径，例如 `/opt/homebrew/opt/mysql-client/bin`。
+
 如果 `dest` 数据库已经存在，工具会直接报错，不覆盖、不删除。备份时会显示已传输大小、速度、耗时和表数量进度，例如 `表 138/2289`；由于 `mysqldump` 没有可靠字节总大小，不显示百分比。
 
 第一版复制表结构、数据、触发器和事件；暂不导出存储过程/函数，避免 MySQL 9 `mysqldump` 连接 MySQL 8 时触发 `INFORMATION_SCHEMA.LIBRARIES` 兼容错误。
