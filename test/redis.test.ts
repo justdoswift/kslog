@@ -10,6 +10,7 @@ import {
   describeRedisConnection,
   describeRedisOperation,
   formatRedisTargetChoice,
+  isRedisAuthFailureOutput,
   isDangerousRedisCommand,
   parseRedisCommand,
   redactRedisPassword,
@@ -89,7 +90,7 @@ describe("redis", () => {
     ]);
   });
 
-  it("quotes shell arguments and uses REDISCLI_AUTH for passwords", () => {
+  it("quotes shell arguments and passes passwords to redis-cli", () => {
     const command = buildRedisCliCommand(
       {
         host: "redis'prod",
@@ -103,9 +104,15 @@ describe("redis", () => {
     expect(command[0]).toBe("sh");
     expect(command[1]).toBe("-lc");
     expect(command[2]).toContain(REDIS_CLI_MISSING_MARKER);
-    expect(command[2]).toContain("export REDISCLI_AUTH='p@ss'\\''word';");
+    expect(command[2]).toContain("'-a' 'p@ss'\\''word'");
     expect(command[2]).toContain("'-h' 'redis'\\''prod'");
     expect(command[2]).toContain("'a'\\''b'");
+  });
+
+  it("detects redis auth failures", () => {
+    expect(isRedisAuthFailureOutput("NOAUTH Authentication required.")).toBe(true);
+    expect(isRedisAuthFailureOutput("WRONGPASS invalid username-password pair")).toBe(true);
+    expect(isRedisAuthFailureOutput("PONG")).toBe(false);
   });
 
   it("parses custom redis commands with quotes", () => {

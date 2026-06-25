@@ -78,7 +78,6 @@ const DANGEROUS_REDIS_COMMANDS = new Set([
 ]);
 export function buildRedisCliCommand(connection, operation) {
     const args = buildRedisArgs(connection, operation);
-    const authLine = connection.password ? `export REDISCLI_AUTH=${shellQuote(connection.password)};` : "";
     const networkCheckLine = connection.host && connection.port
         ? `  if command -v nc >/dev/null 2>&1; then nc -vz -w 3 ${shellQuote(connection.host)} ${shellQuote(String(connection.port))} >&2 || true; fi`
         : undefined;
@@ -88,7 +87,6 @@ export function buildRedisCliCommand(connection, operation) {
         `  echo ${shellQuote(REDIS_CLI_MISSING_MARKER)} >&2`,
         "  exit 127",
         "fi",
-        authLine,
         `exec redis-cli ${args.map(shellQuote).join(" ")}`
     ]
         .filter(Boolean)
@@ -141,6 +139,9 @@ export function redisServiceHost(namespace, workload = DEFAULT_REDIS_WORKLOAD) {
 }
 export function buildRedisArgs(connection, operation) {
     const baseArgs = ["--raw"];
+    if (connection.password) {
+        baseArgs.push("-a", connection.password);
+    }
     if (connection.host) {
         baseArgs.push("-h", connection.host);
     }
@@ -246,5 +247,8 @@ export function redactRedisPassword(value, password) {
         return value;
     }
     return value.split(password).join("******");
+}
+export function isRedisAuthFailureOutput(value) {
+    return /\bNOAUTH\b|WRONGPASS|AUTH failed|Authentication required|invalid username-password pair/i.test(value);
 }
 //# sourceMappingURL=redis.js.map

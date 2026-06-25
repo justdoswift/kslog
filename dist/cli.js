@@ -12,7 +12,7 @@ import { buildLogFileName, defaultOutputDir, formatBytes, normalizeBaseUrl } fro
 import { ProgressBar } from "./progress.js";
 import { copyToClipboard } from "./clipboard.js";
 import { buildLeqiCurl, buildLeqiExecCurlCommand, buildLeqiInvokePayload, buildLeqiReqDtoDefault, DEFAULT_LEQI_ENDPOINT, DEFAULT_LEQI_RUNNER_WORKLOAD, DEFAULT_LEQI_TAX_PAYER_NO, findLeqiReqDtoTemplate, formatLeqiReqDtoTemplateSummary, formatLeqiReqDtoTemplateSource, listLeqiApis } from "./leqi.js";
-import { REDIS_CLI_MISSING_MARKER, buildRedisCliCommand, describeRedisConnection, describeRedisOperation, autoRedisTarget, formatRedisTargetChoice, isDangerousRedisCommand, isRedisTarget, redactRedisPassword, redisServiceHost, sortRedisTargets } from "./redis.js";
+import { REDIS_CLI_MISSING_MARKER, buildRedisCliCommand, describeRedisConnection, describeRedisOperation, autoRedisTarget, formatRedisTargetChoice, isDangerousRedisCommand, isRedisAuthFailureOutput, isRedisTarget, redactRedisPassword, redisServiceHost, sortRedisTargets } from "./redis.js";
 const program = new Command();
 const packageInfo = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 program
@@ -294,8 +294,17 @@ async function runRedisFlow(options) {
     console.log(`执行位置：${namespace} / ${target.name} / ${pod.name} / ${container}`);
     console.log(`Redis：${describeRedisConnection(redisConnection)}`);
     console.log(`命令：${describeRedisOperation(operation)}`);
-    const result = await executeRedisCommand(client, namespace, pod.name, container, redisConnection, operation);
-    const output = parseRedisExecResult(result, redisConnection, target, namespace, container);
+    let result = await executeRedisCommand(client, namespace, pod.name, container, redisConnection, operation);
+    let output = parseRedisExecResult(result, redisConnection, target, namespace, container);
+    if (redisResultNeedsPasswordUpdate(output)) {
+        const redisPassword = await promptAndSaveRedisPassword(profileName, "Redis 密码不正确，请重新输入");
+        redisConnection.password = redisPassword;
+        result = await executeRedisCommand(client, namespace, pod.name, container, redisConnection, operation);
+        output = parseRedisExecResult(result, redisConnection, target, namespace, container);
+        if (redisResultNeedsPasswordUpdate(output)) {
+            throw new Error("Redis 认证失败，请检查密码是否正确。");
+        }
+    }
     if (output.error.trim()) {
         throw new Error(`Redis 命令执行失败：${output.error.trim()}`);
     }
@@ -344,8 +353,11 @@ async function resolveRedisPassword(options, profileName) {
             return profile.redisPassword;
         }
     }
+    return promptAndSaveRedisPassword(profileName, "Redis 密码");
+}
+async function promptAndSaveRedisPassword(profileName, message) {
     const redisPassword = await promptPassword({
-        message: "Redis 密码",
+        message,
         mask: "*"
     });
     if (!redisPassword) {
@@ -359,6 +371,9 @@ async function resolveRedisPassword(options, profileName) {
         console.log("Redis 密码仅本次使用，未关联 profile。");
     }
     return redisPassword;
+}
+function redisResultNeedsPasswordUpdate(result) {
+    return [result.stdout, result.stderr, result.error].some(isRedisAuthFailureOutput);
 }
 async function chooseRedisKubeTarget(client, options) {
     if (hasExplicitRedisTargetHint(options)) {

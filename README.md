@@ -202,7 +202,7 @@ workctl redis
 
 Redis 工具会登录 KubeSphere，自动查找可见 namespace 中的 Redis 工作负载，优先进入 `kubesphere-system / redis`，然后在 Redis Pod 内直接执行 `redis-cli`。这和你在 KubeSphere 终端里输入 `redis-cli` 是同一个思路：默认不再询问 host、port、db。
 
-Redis 密码会保存到当前 KubeSphere 环境 profile 的 `redisPassword` 字段，后续进入同一个环境会自动复用，不再重复输入。配置文件仍是 `~/.workctl/profiles.json`，权限为 `0600`。
+Redis 密码会保存到当前 KubeSphere 环境 profile 的 `redisPassword` 字段，后续进入同一个环境会自动复用，不再重复输入。配置文件仍是 `~/.workctl/profiles.json`，权限为 `0600`。如果保存的密码认证失败，工具会提示重新输入并覆盖保存。
 
 如果你确实要从其它 Pod 访问 Redis，也可以手动指定工作负载，并用 `--redis-host/--redis-port/--redis-db/--redis-password` 覆盖连接参数；传入 `--redis-password` 且使用已保存环境时，也会同步写入当前 profile。
 

@@ -73,6 +73,7 @@ import {
   autoRedisTarget,
   formatRedisTargetChoice,
   isDangerousRedisCommand,
+  isRedisAuthFailureOutput,
   isRedisTarget,
   redactRedisPassword,
   redisServiceHost,
@@ -458,8 +459,19 @@ async function runRedisFlow(options: RedisOptions): Promise<void> {
   console.log(`Redis：${describeRedisConnection(redisConnection)}`);
   console.log(`命令：${describeRedisOperation(operation)}`);
 
-  const result = await executeRedisCommand(client, namespace, pod.name, container, redisConnection, operation);
-  const output = parseRedisExecResult(result, redisConnection, target, namespace, container);
+  let result = await executeRedisCommand(client, namespace, pod.name, container, redisConnection, operation);
+  let output = parseRedisExecResult(result, redisConnection, target, namespace, container);
+
+  if (redisResultNeedsPasswordUpdate(output)) {
+    const redisPassword = await promptAndSaveRedisPassword(profileName, "Redis 密码不正确，请重新输入");
+    redisConnection.password = redisPassword;
+    result = await executeRedisCommand(client, namespace, pod.name, container, redisConnection, operation);
+    output = parseRedisExecResult(result, redisConnection, target, namespace, container);
+
+    if (redisResultNeedsPasswordUpdate(output)) {
+      throw new Error("Redis 认证失败，请检查密码是否正确。");
+    }
+  }
 
   if (output.error.trim()) {
     throw new Error(`Redis 命令执行失败：${output.error.trim()}`);
@@ -533,8 +545,12 @@ async function resolveRedisPassword(options: RedisOptions, profileName?: string)
     }
   }
 
+  return promptAndSaveRedisPassword(profileName, "Redis 密码");
+}
+
+async function promptAndSaveRedisPassword(profileName: string | undefined, message: string): Promise<string> {
   const redisPassword = await promptPassword({
-    message: "Redis 密码",
+    message,
     mask: "*"
   });
   if (!redisPassword) {
@@ -549,6 +565,10 @@ async function resolveRedisPassword(options: RedisOptions, profileName?: string)
   }
 
   return redisPassword;
+}
+
+function redisResultNeedsPasswordUpdate(result: { stdout: string; stderr: string; error: string }): boolean {
+  return [result.stdout, result.stderr, result.error].some(isRedisAuthFailureOutput);
 }
 
 async function chooseRedisKubeTarget(

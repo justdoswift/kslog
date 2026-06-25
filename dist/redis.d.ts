@@ -38,3 +38,4 @@ export declare function parseRedisCommand(command: string): string[];
 export declare function isDangerousRedisCommand(command: string): boolean;
 export declare function describeRedisOperation(operation: RedisOperation): string;
 export declare function redactRedisPassword(value: string, password?: string): string;
+export declare function isRedisAuthFailureOutput(value: string): boolean;
