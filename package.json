@@ -1,6 +1,6 @@
 {
   "name": "bosscli",
-  "version": "0.6.4",
+  "version": "0.6.5",
   "description": "Daily work toolkit CLI",
   "type": "module",
   "repository": {
@@ -21,6 +21,7 @@
     "build": "tsc",
     "dev": "tsx src/cli.ts",
     "generate:leqi-templates": "python3 scripts/generate-leqi-reqdto-templates.py",
+    "generate:lexiang-medical": "python3 scripts/generate-lexiang-medical-snapshot.py",
     "bosscli": "node dist/cli.js",
     "test": "vitest run",
     "start": "node dist/cli.js"

@@ -1,12 +1,15 @@
 import os from "node:os";
 import path from "node:path";
 
-import { checkbox, confirm, input, number, password, select } from "@inquirer/prompts";
+import { checkbox, confirm, editor, input, number, password, select } from "@inquirer/prompts";
 
 import { addDays, assertDateString, buildDateRange, buildDateSelection, formatLocalDate } from "./date-utils.js";
 import type {
   DateSelection,
   HistoryLogFile,
+  LexiangBusinessPayload,
+  LexiangInterfaceInfo,
+  LexiangProfile,
   KubeTarget,
   LeqiAction,
   LeqiApiInfo,
@@ -18,6 +21,11 @@ import type {
 } from "./types.js";
 import { formatRedisTargetChoice, type RedisAction, type RedisConnection, type RedisOperation } from "./redis.js";
 import { formatLeqiApiChoice, parseReqDtoJson } from "./leqi.js";
+import {
+  DEFAULT_LEXIANG_VERSION,
+  formatLexiangInterfaceChoice,
+  parseLexiangBusinessPayloadJson
+} from "./lexiang.js";
 import { buildLogFileName, defaultOutputDir, formatBytes, normalizeBaseUrl } from "./utils.js";
 
 const NEW_PROFILE_VALUE = "__new__";
@@ -30,13 +38,30 @@ export interface ConnectionAnswers {
   insecure?: boolean;
 }
 
-export type BosscliFeature = "logs" | "leqi" | "leqi-sm4" | "get-hash-code" | "redis" | "middle-db-mock" | "exit";
+export type BosscliFeature =
+  | "logs"
+  | "leqi"
+  | "lexiang"
+  | "leqi-sm4"
+  | "get-hash-code"
+  | "redis"
+  | "middle-db-mock"
+  | "exit";
 export type RedisActionChoice = RedisAction | "switch-db" | "back";
 
 export type ProfileChoice =
   | {
       kind: "saved";
       profile: SavedProfile;
+    }
+  | {
+      kind: "new";
+    };
+
+export type LexiangProfileChoice =
+  | {
+      kind: "saved";
+      profile: LexiangProfile;
     }
   | {
       kind: "new";
@@ -138,6 +163,7 @@ export async function chooseBosscliFeature(): Promise<BosscliFeature> {
     choices: [
       { name: "k8s", value: "logs" },
       { name: "乐企 curl", value: "leqi" },
+      { name: "乐享", value: "lexiang" },
       { name: "乐企 SM4", value: "leqi-sm4" },
       { name: "Get Hash Code", value: "get-hash-code" },
       { name: "Redis", value: "redis" },
@@ -145,6 +171,135 @@ export async function chooseBosscliFeature(): Promise<BosscliFeature> {
       { name: "退出", value: "exit" }
     ]
   });
+}
+
+export async function chooseLexiangProfile(
+  profiles: LexiangProfile[],
+  defaultProfile?: string
+): Promise<LexiangProfileChoice> {
+  if (profiles.length === 0) {
+    return { kind: "new" };
+  }
+
+  const choices = profiles.map((profile) => ({
+    name: profile.name === defaultProfile ? `${profile.name} (默认)` : profile.name,
+    value: profile.name
+  }));
+  choices.push({ name: "新增乐享环境", value: NEW_PROFILE_VALUE });
+
+  const selected = await select({
+    message: "选择乐享环境",
+    choices,
+    default: defaultProfile ?? profiles[0]?.name
+  });
+
+  if (selected === NEW_PROFILE_VALUE) {
+    return { kind: "new" };
+  }
+
+  const profile = profiles.find((item) => item.name === selected);
+  if (!profile) {
+    throw new Error(`乐享 profile 不存在：${selected}`);
+  }
+
+  return { kind: "saved", profile };
+}
+
+export async function promptLexiangProfile(options: {
+  existingNames: string[];
+}): Promise<{
+  name: string;
+  baseUrl: string;
+  appid: string;
+  appkey: string;
+  taxPayerNo: string;
+  version: string;
+}> {
+  const existing = new Set(options.existingNames);
+  const name = await input({
+    message: "乐享环境名称",
+    required: true,
+    validate: (value) => {
+      const name = value.trim();
+      if (!name) {
+        return "环境名称不能为空";
+      }
+      if (existing.has(name)) {
+        return "环境名称已存在，请换一个";
+      }
+      return true;
+    },
+    transformer: (value) => value.trim()
+  });
+  const baseUrl = await input({
+    message: "乐享 baseUrl",
+    required: true,
+    transformer: (value) => value.trim()
+  });
+  const appid = await input({
+    message: "appid",
+    required: true,
+    transformer: (value) => value.trim()
+  });
+  const appkey = await password({
+    message: "appkey",
+    mask: "*"
+  });
+  const taxPayerNo = await input({
+    message: "X-TaxPayerNo",
+    required: true,
+    transformer: (value) => value.trim()
+  });
+  const version = await input({
+    message: "version",
+    default: DEFAULT_LEXIANG_VERSION,
+    required: true,
+    transformer: (value) => value.trim()
+  });
+
+  return {
+    name: name.trim(),
+    baseUrl: normalizeBaseUrl(baseUrl),
+    appid: appid.trim(),
+    appkey,
+    taxPayerNo: taxPayerNo.trim(),
+    version: version.trim() || DEFAULT_LEXIANG_VERSION
+  };
+}
+
+export async function chooseLexiangInterface(apis: LexiangInterfaceInfo[]): Promise<LexiangInterfaceInfo> {
+  if (apis.length === 0) {
+    throw new Error("没有可用的乐享接口");
+  }
+
+  return select({
+    message: "选择乐享接口",
+    pageSize: 15,
+    choices: apis.map((api) => ({
+      name: formatLexiangInterfaceChoice(api),
+      value: api
+    }))
+  });
+}
+
+export async function promptLexiangBusinessPayload(options: {
+  defaultPayload: LexiangBusinessPayload;
+}): Promise<LexiangBusinessPayload> {
+  const value = await editor({
+    message: "业务参数 JSON",
+    default: JSON.stringify(options.defaultPayload, null, 2),
+    postfix: ".json",
+    validate: (input) => {
+      try {
+        parseLexiangBusinessPayloadJson(input);
+        return true;
+      } catch (error) {
+        return (error as Error).message;
+      }
+    }
+  });
+
+  return parseLexiangBusinessPayloadJson(value);
 }
 
 export async function chooseNamespace(namespaces: string[], provided?: string): Promise<string> {

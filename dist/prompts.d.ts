@@ -1,4 +1,4 @@
-import type { DateSelection, HistoryLogFile, KubeTarget, LeqiAction, LeqiApiInfo, LeqiReqDto, LogRange, LogSource, PodSummary, SavedProfile } from "./types.js";
+import type { DateSelection, HistoryLogFile, LexiangBusinessPayload, LexiangInterfaceInfo, LexiangProfile, KubeTarget, LeqiAction, LeqiApiInfo, LeqiReqDto, LogRange, LogSource, PodSummary, SavedProfile } from "./types.js";
 import { type RedisAction, type RedisConnection, type RedisOperation } from "./redis.js";
 export declare const DEFAULT_NAMESPACE = "tax-digital";
 export interface ConnectionAnswers {
@@ -7,11 +7,17 @@ export interface ConnectionAnswers {
     password: string;
     insecure?: boolean;
 }
-export type BosscliFeature = "logs" | "leqi" | "leqi-sm4" | "get-hash-code" | "redis" | "middle-db-mock" | "exit";
+export type BosscliFeature = "logs" | "leqi" | "lexiang" | "leqi-sm4" | "get-hash-code" | "redis" | "middle-db-mock" | "exit";
 export type RedisActionChoice = RedisAction | "switch-db" | "back";
 export type ProfileChoice = {
     kind: "saved";
     profile: SavedProfile;
+} | {
+    kind: "new";
+};
+export type LexiangProfileChoice = {
+    kind: "saved";
+    profile: LexiangProfile;
 } | {
     kind: "new";
 };
@@ -20,6 +26,21 @@ export declare function promptConnection(defaults: Partial<ConnectionAnswers>): 
 export declare function promptNewProfileName(existingNames: string[]): Promise<string>;
 export declare function preferredNamespace(namespaces: string[], preferred?: string): string | undefined;
 export declare function chooseBosscliFeature(): Promise<BosscliFeature>;
+export declare function chooseLexiangProfile(profiles: LexiangProfile[], defaultProfile?: string): Promise<LexiangProfileChoice>;
+export declare function promptLexiangProfile(options: {
+    existingNames: string[];
+}): Promise<{
+    name: string;
+    baseUrl: string;
+    appid: string;
+    appkey: string;
+    taxPayerNo: string;
+    version: string;
+}>;
+export declare function chooseLexiangInterface(apis: LexiangInterfaceInfo[]): Promise<LexiangInterfaceInfo>;
+export declare function promptLexiangBusinessPayload(options: {
+    defaultPayload: LexiangBusinessPayload;
+}): Promise<LexiangBusinessPayload>;
 export declare function chooseNamespace(namespaces: string[], provided?: string): Promise<string>;
 export declare function chooseTarget(targets: KubeTarget[], provided?: string): Promise<KubeTarget>;
 export declare function chooseRedisTargetCandidate(targets: KubeTarget[]): Promise<KubeTarget>;

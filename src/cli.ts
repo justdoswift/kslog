@@ -14,6 +14,8 @@ import {
   chooseContainer,
   chooseDateSelection,
   chooseHistoryFiles,
+  chooseLexiangInterface,
+  chooseLexiangProfile,
   chooseLogRange,
   chooseLogSource,
   chooseNamespace,
@@ -23,6 +25,8 @@ import {
   chooseSavedProfile,
   chooseTarget,
   chooseBosscliFeature,
+  promptLexiangBusinessPayload,
+  promptLexiangProfile,
   promptLeqiReqDto,
   promptConnection,
   promptNewProfileName,
@@ -38,6 +42,7 @@ import {
   setProfileRedisPassword,
   upsertProfile
 } from "./profile-store.js";
+import { readLexiangProfiles, upsertLexiangProfile } from "./lexiang-profile-store.js";
 import {
   exportHistoryLogs,
   filterHistoryFilesByService,
@@ -49,6 +54,7 @@ import type {
   HistoryLogFile,
   KubeServiceSummary,
   KubeTarget,
+  LexiangProfile,
   LogRange,
   LogSource,
   PodSummary
@@ -74,6 +80,12 @@ import {
   formatLeqiReqDtoTemplateSource,
   listLeqiApis
 } from "./leqi.js";
+import {
+  buildLexiangBusinessPayloadDefault,
+  buildLexiangCurl,
+  formatLexiangTemplateSummary,
+  listLexiangInterfaces
+} from "./lexiang.js";
 import {
   REDIS_CLI_MISSING_MARKER,
   buildRedisCliCommand,
@@ -182,6 +194,12 @@ program.action(async (options: DownloadOptions) => {
 
     if (feature === "leqi") {
       await runLeqiFlow(options);
+      console.log("");
+      continue;
+    }
+
+    if (feature === "lexiang") {
+      await runLexiangFlow();
       console.log("");
       continue;
     }
@@ -467,6 +485,51 @@ async function runLeqiFlow(options: LeqiOptions): Promise<void> {
   }
 
   console.log(result.stdout.trim() || "(无响应内容)");
+}
+
+async function runLexiangFlow(): Promise<void> {
+  const profile = await resolveLexiangProfile();
+  const api = await chooseLexiangInterface(listLexiangInterfaces());
+  const defaultPayload = buildLexiangBusinessPayloadDefault(api, profile.taxPayerNo);
+
+  console.log(`\n${formatLexiangTemplateSummary(api)}\n`);
+  const businessPayload = await promptLexiangBusinessPayload({ defaultPayload });
+  const curlText = buildLexiangCurl({
+    profile,
+    api,
+    businessPayload
+  });
+
+  console.log(`已选择：${api.name}`);
+  console.log("\n可复制 curl：");
+  console.log(curlText);
+  const clipboardResult = await copyToClipboard(curlText);
+  if (clipboardResult.copied) {
+    console.log(`\n已复制到剪切板${clipboardResult.command ? `：${clipboardResult.command}` : ""}`);
+  } else {
+    console.log(`\n剪切板复制失败，请手动复制。${clipboardResult.error ? `原因：${clipboardResult.error}` : ""}`);
+  }
+  console.log(`\n文档来源：${api.sourceDoc} / ${api.sectionTitle}`);
+}
+
+async function resolveLexiangProfile(): Promise<LexiangProfile> {
+  const config = await readLexiangProfiles();
+  const choice = await chooseLexiangProfile(config.profiles, config.defaultProfile);
+
+  if (choice.kind === "saved") {
+    return choice.profile;
+  }
+
+  const answers = await promptLexiangProfile({
+    existingNames: config.profiles.map((profile) => profile.name)
+  });
+  console.warn("提示：appid/appkey 会按你的选择明文保存到 ~/.bosscli/lexiang-profiles.json。");
+  const profile = await upsertLexiangProfile({
+    ...answers,
+    setDefault: true
+  });
+  console.log(`已保存乐享环境：${profile.name}`);
+  return profile;
 }
 
 async function runRedisFlow(options: RedisOptions): Promise<void> {

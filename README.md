@@ -98,6 +98,7 @@ bosscli
 
 - k8s
 - 乐企 curl
+- 乐享
 - 乐企 SM4
 - Get Hash Code
 - Redis
@@ -164,6 +165,20 @@ bosscli history \
   --workload tax-invoice-business-server \
   --date 2026-06-24 \
   --history-file /opt/saas-logs/tax-invoice-business-server-xxx.log
+```
+
+## 乐享医疗 curl
+
+在首页选择 `乐享`，可以从《乐享协同数字化电子发票接口规范（医疗） v1.0.18.docx》的内置快照里选择接口，并生成标准 REST curl。这个功能独立于 `乐企 curl`，不会使用 `apiIdentity/reqDTO/proxy invoke`。
+
+第一次进入时会新增乐享环境，明文保存到 `~/.bosscli/lexiang-profiles.json`，权限为 `0600`。保存内容包括 `name/baseUrl/appid/appkey/taxPayerNo/version`，后续进入可直接选择环境。
+
+生成 curl 时会把业务参数 JSON 做 UTF-8 Base64 作为 `data`，自动生成 `noise`，并按文档规则用 SM3 生成大写 `sign`。curl 会自动复制到系统剪切板。
+
+在源码仓库内重新抽取本机 Word 文档里的乐享医疗接口快照：
+
+```bash
+npm run generate:lexiang-medical
 ```
 
 ## 乐企接口

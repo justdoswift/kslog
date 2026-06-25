@@ -131,3 +131,42 @@ export interface LeqiInvokePayload {
     reqDTO: LeqiReqDto;
 }
 export type LeqiAction = "curl" | "call";
+export interface LexiangField {
+    key: string;
+    name: string;
+    type: string;
+    length: string;
+    required: string;
+    description: string;
+    group?: string;
+}
+export interface LexiangInterfaceInfo {
+    category: string;
+    name: string;
+    path: string;
+    method: "POST";
+    description: string;
+    sourceDoc: string;
+    sectionTitle: string;
+    fields: LexiangField[];
+    template: {
+        [key: string]: JsonValue;
+    };
+}
+export interface LexiangProfile {
+    name: string;
+    baseUrl: string;
+    appid: string;
+    appkey: string;
+    taxPayerNo: string;
+    version: string;
+    createdAt: string;
+    updatedAt: string;
+}
+export interface LexiangProfilesFile {
+    defaultProfile?: string;
+    profiles: LexiangProfile[];
+}
+export type LexiangBusinessPayload = {
+    [key: string]: JsonValue;
+};
