@@ -84,6 +84,7 @@ export async function chooseBosscliFeature() {
             { name: "k8s", value: "logs" },
             { name: "乐企", value: "leqi" },
             { name: "Redis", value: "redis" },
+            { name: "中间库 mock", value: "middle-db-mock" },
             { name: "退出", value: "exit" }
         ]
     });

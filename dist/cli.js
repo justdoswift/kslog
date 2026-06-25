@@ -13,9 +13,11 @@ import { ProgressBar } from "./progress.js";
 import { copyToClipboard } from "./clipboard.js";
 import { buildLeqiCurl, buildLeqiExecCurlCommand, buildLeqiInvokePayload, buildLeqiReqDtoDefault, DEFAULT_LEQI_ENDPOINT, DEFAULT_LEQI_RUNNER_WORKLOAD, DEFAULT_LEQI_TAX_PAYER_NO, findLeqiReqDtoTemplate, formatLeqiReqDtoTemplateSummary, formatLeqiReqDtoTemplateSource, listLeqiApis } from "./leqi.js";
 import { REDIS_CLI_MISSING_MARKER, buildRedisCliCommand, describeRedisConnection, describeRedisOperation, autoRedisTarget, formatRedisTargetChoice, isDangerousRedisCommand, isRedisAuthFailureOutput, isRedisTarget, formatRedisServiceChoice, preferredRedisServicePort, redisServiceDnsName, redactRedisPassword, redisServiceHost, sortRedisServices, sortRedisTargets } from "./redis.js";
+import { openUrl } from "./open-url.js";
 const program = new Command();
 const packageInfo = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const DEFAULT_REDIS_SERVICE_HOST = "redis.tax-component";
+const MIDDLE_DB_MOCK_URL = "https://silken-cliff-6z59.here.now/";
 program
     .name("bosscli")
     .description("日常工作工具集 CLI")
@@ -39,6 +41,12 @@ program.action(async (options) => {
         }
         if (feature === "redis") {
             await runRedisFlow(options);
+            console.log("");
+            continue;
+        }
+        if (feature === "middle-db-mock") {
+            await openUrl(MIDDLE_DB_MOCK_URL);
+            console.log(`已打开中间库 mock：${MIDDLE_DB_MOCK_URL}`);
             console.log("");
             continue;
         }
