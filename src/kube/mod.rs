@@ -26,6 +26,7 @@ pub struct KubeSphereClient {
     pub base_url: String,
     cookie_jar: CookieJar,
     http: reqwest::Client,
+    http_no_redirect: reqwest::Client,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -173,10 +174,15 @@ impl KubeSphereClient {
             .danger_accept_invalid_certs(options.insecure)
             .redirect(reqwest::redirect::Policy::limited(10))
             .build()?;
+        let http_no_redirect = reqwest::Client::builder()
+            .danger_accept_invalid_certs(options.insecure)
+            .redirect(reqwest::redirect::Policy::none())
+            .build()?;
         Ok(Self {
             base_url,
             cookie_jar: CookieJar::new(),
             http,
+            http_no_redirect,
         })
     }
 
@@ -184,7 +190,7 @@ impl KubeSphereClient {
         let encrypt_key = self.get_login_encrypt_key().await?;
         let encrypted = encrypt_password(&encrypt_key, password);
         let response = self
-            .request(reqwest::Method::POST, "/login")
+            .request_no_redirect(reqwest::Method::POST, "/login")
             .header(CONTENT_TYPE, "application/json")
             .json(&serde_json::json!({
                 "username": username,
@@ -543,6 +549,21 @@ impl KubeSphereClient {
         builder
     }
 
+    fn request_no_redirect(
+        &self,
+        method: reqwest::Method,
+        api_path: &str,
+    ) -> reqwest::RequestBuilder {
+        let mut builder = self
+            .http_no_redirect
+            .request(method, join_url(&self.base_url, api_path));
+        let cookie = cookie_header_from_jar(&self.cookie_jar);
+        if !cookie.is_empty() {
+            builder = builder.header(COOKIE, cookie);
+        }
+        builder
+    }
+
     fn store_cookies(&mut self, headers: &reqwest::header::HeaderMap) {
         let set_cookie_headers = headers
             .get_all(SET_COOKIE)
@@ -711,6 +732,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
 
     #[test]
     fn decodes_exec_channels() {
@@ -721,5 +744,53 @@ mod tests {
         assert_eq!(result.stdout, "ok");
         assert_eq!(result.stderr, "e");
         assert_eq!(result.error, "x");
+    }
+
+    #[tokio::test]
+    async fn login_keeps_cookie_from_redirect_response() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            for _ in 0..3 {
+                let Ok((mut socket, _)) = listener.accept().await else {
+                    break;
+                };
+                let mut buffer = vec![0u8; 4096];
+                let read = socket.read(&mut buffer).await.unwrap_or(0);
+                let request = String::from_utf8_lossy(&buffer[..read]);
+                let response = if request.starts_with("GET /login ") {
+                    let body = r#"globals = JSON.parse(`{"config":{"encryptKey":"kubesphere"}}`)"#;
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{}",
+                        body.len(),
+                        body
+                    )
+                } else if request.starts_with("POST /login ") {
+                    "HTTP/1.1 302 Found\r\nSet-Cookie: token=abc; Path=/\r\nLocation: /welcome\r\nContent-Length: 0\r\n\r\n"
+                        .to_string()
+                } else {
+                    let body = "<!DOCTYPE html><title>KubeSphere</title>";
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{}",
+                        body.len(),
+                        body
+                    )
+                };
+                socket.write_all(response.as_bytes()).await.unwrap();
+            }
+        });
+
+        let mut client = KubeSphereClient::new(ClientOptions {
+            base_url: format!("http://{addr}"),
+            insecure: false,
+        })
+        .unwrap();
+
+        client.login("admin", "P@88w0rd").await.unwrap();
+        assert_eq!(
+            client.cookie_jar.get("token").map(String::as_str),
+            Some("abc")
+        );
+        server.abort();
     }
 }
