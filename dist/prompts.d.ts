@@ -1,6 +1,7 @@
-import type { DateSelection, HistoryLogFile, LexiangBusinessPayload, LexiangInterfaceInfo, LexiangProfile, KubeTarget, LeqiAction, LeqiApiInfo, LeqiReqDto, LogRange, LogSource, PodSummary, SavedProfile } from "./types.js";
+import type { DateSelection, HistoryLogFile, LexiangBusinessPayload, LexiangInterfaceInfo, LexiangProfile, KubeTarget, LeqiAction, LeqiApiInfo, LeqiReqDto, LogRange, LogSource, MySqlProfile, PodSummary, SavedProfile } from "./types.js";
 import { type RedisAction, type RedisConnection, type RedisOperation } from "./redis.js";
 import { type LexiangCatalogInfo } from "./lexiang.js";
+import { type MySqlConnection } from "./mysql-backup.js";
 export declare const DEFAULT_NAMESPACE = "tax-digital";
 export interface ConnectionAnswers {
     baseUrl: string;
@@ -8,7 +9,7 @@ export interface ConnectionAnswers {
     password: string;
     insecure?: boolean;
 }
-export type BosscliFeature = "logs" | "leqi" | "lexiang" | "leqi-sm4" | "get-hash-code" | "redis" | "middle-db-mock" | "file-share" | "exit";
+export type BosscliFeature = "logs" | "leqi" | "lexiang" | "leqi-sm4" | "get-hash-code" | "redis" | "mysql-backup" | "middle-db-mock" | "file-share" | "exit";
 export type RedisActionChoice = RedisAction | "switch-db" | "back";
 export type LexiangNextAction = "continue" | "switch-catalog" | "switch-profile" | "home" | "exit";
 export type ProfileChoice = {
@@ -23,6 +24,12 @@ export type LexiangProfileChoice = {
 } | {
     kind: "new";
 };
+export type MySqlProfileChoice = {
+    kind: "saved";
+    profile: MySqlProfile;
+} | {
+    kind: "new";
+};
 export declare function chooseSavedProfile(profiles: SavedProfile[], defaultProfile?: string): Promise<ProfileChoice>;
 export declare function promptConnection(defaults: Partial<ConnectionAnswers>): Promise<ConnectionAnswers>;
 export declare function promptNewProfileName(existingNames: string[]): Promise<string>;
@@ -30,6 +37,20 @@ export declare function preferredNamespace(namespaces: string[], preferred?: str
 export declare function chooseBosscliFeature(defaultFeature?: BosscliFeature): Promise<BosscliFeature>;
 export declare function chooseLexiangProfile(profiles: LexiangProfile[], defaultProfile?: string): Promise<LexiangProfileChoice>;
 export declare function chooseLexiangCatalog(catalogs: LexiangCatalogInfo[]): Promise<LexiangCatalogInfo>;
+export declare function chooseMySqlProfile(profiles: MySqlProfile[], defaultProfile?: string): Promise<MySqlProfileChoice>;
+export declare function promptMySqlProfile(options: {
+    existingNames: string[];
+}): Promise<MySqlConnection & {
+    name: string;
+    setDefault: boolean;
+}>;
+export declare function promptMySqlBackupDatabases(options: {
+    source?: string;
+    dest?: string;
+}): Promise<{
+    source: string;
+    dest: string;
+}>;
 export declare function promptLexiangProfile(options: {
     existingNames: string[];
 }): Promise<{

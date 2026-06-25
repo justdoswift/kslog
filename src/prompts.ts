@@ -16,6 +16,7 @@ import type {
   LeqiReqDto,
   LogRange,
   LogSource,
+  MySqlProfile,
   PodSummary,
   SavedProfile
 } from "./types.js";
@@ -27,6 +28,7 @@ import {
   type LexiangCatalogInfo,
   parseLexiangBusinessPayloadJson
 } from "./lexiang.js";
+import { DEFAULT_MYSQL_PORT, isValidDatabaseName, type MySqlConnection } from "./mysql-backup.js";
 import { buildLogFileName, defaultOutputDir, formatBytes, normalizeBaseUrl } from "./utils.js";
 
 const NEW_PROFILE_VALUE = "__new__";
@@ -46,6 +48,7 @@ export type BosscliFeature =
   | "leqi-sm4"
   | "get-hash-code"
   | "redis"
+  | "mysql-backup"
   | "middle-db-mock"
   | "file-share"
   | "exit";
@@ -65,6 +68,15 @@ export type LexiangProfileChoice =
   | {
       kind: "saved";
       profile: LexiangProfile;
+    }
+  | {
+      kind: "new";
+    };
+
+export type MySqlProfileChoice =
+  | {
+      kind: "saved";
+      profile: MySqlProfile;
     }
   | {
       kind: "new";
@@ -168,6 +180,7 @@ export async function chooseBosscliFeature(defaultFeature?: BosscliFeature): Pro
     { name: "乐企 SM4", value: "leqi-sm4" },
     { name: "Get Hash Code", value: "get-hash-code" },
     { name: "Redis", value: "redis" },
+    { name: "MySQL 备份", value: "mysql-backup" },
     { name: "中间库 mock", value: "middle-db-mock" },
     { name: "文件共享", value: "file-share" },
     { name: "退出", value: "exit" }
@@ -226,6 +239,136 @@ export async function chooseLexiangCatalog(catalogs: LexiangCatalogInfo[]): Prom
       value: catalog
     }))
   });
+}
+
+export async function chooseMySqlProfile(
+  profiles: MySqlProfile[],
+  defaultProfile?: string
+): Promise<MySqlProfileChoice> {
+  if (profiles.length === 0) {
+    return { kind: "new" };
+  }
+
+  const choices = profiles.map((profile) => ({
+    name: profile.name === defaultProfile ? `${profile.name} (默认)` : profile.name,
+    value: profile.name
+  }));
+  choices.push({ name: "新增 MySQL 环境", value: NEW_PROFILE_VALUE });
+
+  const selected = await select({
+    message: "选择 MySQL 环境",
+    choices,
+    default: defaultProfile ?? profiles[0]?.name
+  });
+
+  if (selected === NEW_PROFILE_VALUE) {
+    return { kind: "new" };
+  }
+
+  const profile = profiles.find((item) => item.name === selected);
+  if (!profile) {
+    throw new Error(`MySQL profile 不存在：${selected}`);
+  }
+
+  return { kind: "saved", profile };
+}
+
+export async function promptMySqlProfile(options: {
+  existingNames: string[];
+}): Promise<MySqlConnection & { name: string; setDefault: boolean }> {
+  const existing = new Set(options.existingNames);
+  const name = await input({
+    message: "MySQL 环境名称",
+    default: "开发数据库",
+    required: true,
+    validate: (value) => {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return "MySQL 环境名称不能为空";
+      }
+      if (existing.has(trimmed)) {
+        return "MySQL 环境名称已存在，请换一个";
+      }
+      return true;
+    },
+    transformer: (value) => value.trim()
+  });
+  const host = await input({
+    message: "MySQL host",
+    default: "192.168.7.182",
+    required: true
+  });
+  const port = await number({
+    message: "MySQL port",
+    default: DEFAULT_MYSQL_PORT,
+    min: 1,
+    required: true
+  });
+  const username = await input({
+    message: "MySQL 用户名",
+    default: "root",
+    required: true
+  });
+  const mysqlPassword = await password({
+    message: "MySQL 密码（可空）",
+    mask: "*"
+  });
+  const setDefault = await confirm({ message: "设为默认 MySQL 环境", default: true });
+
+  return {
+    name: name.trim(),
+    host: host.trim(),
+    port,
+    username: username.trim(),
+    password: mysqlPassword,
+    setDefault
+  };
+}
+
+export async function promptMySqlBackupDatabases(options: {
+  source?: string;
+  dest?: string;
+}): Promise<{ source: string; dest: string }> {
+  const source =
+    options.source ??
+    (await input({
+      message: "source 数据库",
+      default: "lxzsdb_bak",
+      required: true,
+      validate: validateDatabaseName
+    }));
+  const destDefault = source === "lxzsdb_bak" ? "lxzsdb_bak2" : `${source}_copy`;
+  const dest =
+    options.dest ??
+    (await input({
+      message: "dest 数据库",
+      default: destDefault,
+      required: true,
+      validate: validateDatabaseName
+    }));
+
+  const trimmedSource = source.trim();
+  const trimmedDest = dest.trim();
+  const sourceValidation = validateDatabaseName(trimmedSource);
+  if (sourceValidation !== true) {
+    throw new Error(sourceValidation);
+  }
+  const destValidation = validateDatabaseName(trimmedDest);
+  if (destValidation !== true) {
+    throw new Error(destValidation);
+  }
+  if (trimmedSource === trimmedDest) {
+    throw new Error("source 和 dest 不能相同");
+  }
+
+  return {
+    source: trimmedSource,
+    dest: trimmedDest
+  };
+}
+
+function validateDatabaseName(value: string): true | string {
+  return isValidDatabaseName(value.trim()) ? true : "数据库名只支持字母、数字、下划线和 $";
 }
 
 export async function promptLexiangProfile(options: {

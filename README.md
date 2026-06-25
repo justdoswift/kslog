@@ -108,6 +108,7 @@ bosscli
 - 乐企 SM4
 - Get Hash Code
 - Redis
+- MySQL 备份
 - 中间库 mock
 - 文件共享
 - 退出
@@ -265,6 +266,42 @@ bosscli redis \
   --redis-action get \
   --key tax:invoice:demo
 ```
+
+## MySQL 备份
+
+进入 MySQL 备份工具：
+
+```bash
+bosscli mysql-backup
+```
+
+MySQL 备份用于把同一 MySQL 实例里的 `source` 数据库复制到新的 `dest` 数据库。工具会使用本机 `mysql` 和 `mysqldump` 命令执行，不引入额外数据库驱动。第一次使用时会新增 MySQL 环境并明文保存到 `~/.bosscli/mysql-profiles.json`，权限为 `0600`。
+
+如果 `dest` 数据库已经存在，工具会直接报错，不覆盖、不删除。备份时会显示已传输大小、速度、耗时和表数量进度，例如 `表 138/2289`；由于 `mysqldump` 没有可靠字节总大小，不显示百分比。
+
+第一版复制表结构、数据、触发器和事件；暂不导出存储过程/函数，避免 MySQL 9 `mysqldump` 连接 MySQL 8 时触发 `INFORMATION_SCHEMA.LIBRARIES` 兼容错误。
+
+也可以直达：
+
+```bash
+bosscli mysql-backup \
+  --profile 开发数据库 \
+  --source lxzsdb_bak \
+  --dest lxzsdb_bak2
+```
+
+使用临时连接参数：
+
+```bash
+bosscli mysql-backup \
+  --host 192.168.7.182 \
+  --port 3306 \
+  --username root \
+  --source lxzsdb_bak \
+  --dest lxzsdb_bak2
+```
+
+也可以用 `BOSSCLI_MYSQL_PASSWORD` 提供密码，避免把密码写在命令行参数里。
 
 保存环境配置：
 

@@ -188,3 +188,18 @@ export interface LexiangProfilesFile {
 }
 
 export type LexiangBusinessPayload = { [key: string]: JsonValue };
+
+export interface MySqlProfile {
+  name: string;
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MySqlProfilesFile {
+  defaultProfile?: string;
+  profiles: MySqlProfile[];
+}

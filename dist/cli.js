@@ -5,9 +5,10 @@ import path from "node:path";
 import { confirm, input, number, password as promptPassword, select } from "@inquirer/prompts";
 import { Command, Option } from "commander";
 import { KubeSphereClient } from "./kubesphere-client.js";
-import { buildOutputPath, chooseLeqiAction, chooseLeqiApi, chooseContainer, chooseDateSelection, chooseHistoryFiles, chooseLexiangCatalog, chooseLexiangInterface, chooseLexiangNextAction, chooseLexiangProfile, chooseLogRange, chooseLogSource, chooseNamespace, choosePod, chooseRedisAction, chooseRedisTargetCandidate, chooseSavedProfile, chooseTarget, chooseBosscliFeature, promptLexiangBusinessPayload, promptLexiangProfile, promptLeqiReqDto, promptConnection, promptNewProfileName, promptRedisOperation } from "./prompts.js";
+import { buildOutputPath, chooseLeqiAction, chooseLeqiApi, chooseContainer, chooseDateSelection, chooseHistoryFiles, chooseLexiangCatalog, chooseLexiangInterface, chooseLexiangNextAction, chooseLexiangProfile, chooseLogRange, chooseLogSource, chooseMySqlProfile, chooseNamespace, choosePod, chooseRedisAction, chooseRedisTargetCandidate, chooseSavedProfile, chooseTarget, chooseBosscliFeature, promptLexiangBusinessPayload, promptLexiangProfile, promptLeqiReqDto, promptConnection, promptMySqlBackupDatabases, promptMySqlProfile, promptNewProfileName, promptRedisOperation } from "./prompts.js";
 import { getProfile, readProfiles, removeProfile, setDefaultProfile, setProfileRedisConfig, setProfileRedisPassword, upsertProfile } from "./profile-store.js";
 import { readLexiangProfiles, upsertLexiangProfile } from "./lexiang-profile-store.js";
+import { getMySqlProfile, readMySqlProfiles, upsertMySqlProfile } from "./mysql-profile-store.js";
 import { exportHistoryLogs, filterHistoryFilesByService, listHistoryFiles, statHistoryFiles } from "./history-logs.js";
 import { buildLogFileName, defaultOutputDir, formatBytes, normalizeBaseUrl } from "./utils.js";
 import { ProgressBar } from "./progress.js";
@@ -15,6 +16,7 @@ import { copyToClipboard } from "./clipboard.js";
 import { buildLeqiCurl, buildLeqiExecCurlCommand, buildLeqiInvokePayload, buildLeqiReqDtoDefault, DEFAULT_LEQI_ENDPOINT, DEFAULT_LEQI_RUNNER_WORKLOAD, DEFAULT_LEQI_TAX_PAYER_NO, findLeqiReqDtoTemplate, formatLeqiReqDtoTemplateSummary, formatLeqiReqDtoTemplateSource, listLeqiApis } from "./leqi.js";
 import { buildLexiangBusinessPayloadDefault, buildLexiangCurl, formatLexiangTemplateSummary, listLexiangCatalogs, listLexiangInterfaces } from "./lexiang.js";
 import { REDIS_CLI_MISSING_MARKER, buildRedisCliCommand, describeRedisConnection, describeRedisOperation, autoRedisTarget, formatRedisTargetChoice, isDangerousRedisCommand, isRedisAuthFailureOutput, isRedisTarget, formatRedisServiceChoice, preferredRedisServicePort, redisServiceDnsName, redactRedisPassword, redisServiceHost, sortRedisServices, sortRedisTargets } from "./redis.js";
+import { DEFAULT_MYSQL_PORT, backupMySqlDatabase } from "./mysql-backup.js";
 import { openUrl } from "./open-url.js";
 const program = new Command();
 const packageInfo = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
@@ -29,6 +31,7 @@ function clearInteractiveScreen() {
     }
 }
 program
+    .enablePositionalOptions()
     .name("bosscli")
     .description("日常工作工具集 CLI")
     .version(packageInfo.version ?? "0.0.0");
@@ -62,6 +65,11 @@ program.action(async (options) => {
         }
         if (feature === "redis") {
             await runRedisFlow(options);
+            console.log("");
+            continue;
+        }
+        if (feature === "mysql-backup") {
+            await runMySqlBackupFlow({});
             console.log("");
             continue;
         }
@@ -133,6 +141,11 @@ addConnectionOptions(redis);
 addRedisOptions(redis);
 redis.action(async (options, command) => {
     await runRedisFlow(mergeCommandOptions(options, command));
+});
+const mysqlBackup = program.command("mysql-backup").description("复制 MySQL 数据库到同实例新库");
+addMySqlBackupOptions(mysqlBackup);
+mysqlBackup.action(async (options, command) => {
+    await runMySqlBackupFlow(mergeCommandOptions(options, command));
 });
 const profile = program.command("profile").description("管理已保存的 KubeSphere 环境");
 profile.command("list").description("列出环境").action(async () => {
@@ -225,6 +238,16 @@ function addRedisOptions(command) {
         .option("--key <key>", "GET 使用的 key")
         .option("--pattern <pattern>", "SCAN 使用的 key pattern")
         .option("--redis-command <command>", "自定义 Redis 命令，例如 TTL my:key");
+}
+function addMySqlBackupOptions(command) {
+    command
+        .addOption(new Option("--profile <name>", "使用已保存的 MySQL 环境").env("BOSSCLI_MYSQL_PROFILE"))
+        .addOption(new Option("--host <host>", "MySQL host").env("BOSSCLI_MYSQL_HOST"))
+        .addOption(new Option("--port <number>", "MySQL port").env("BOSSCLI_MYSQL_PORT").argParser(parsePositiveInteger))
+        .addOption(new Option("-u, --username <username>", "MySQL 用户名").env("BOSSCLI_MYSQL_USERNAME"))
+        .addOption(new Option("-p, --password <password>", "MySQL 密码").env("BOSSCLI_MYSQL_PASSWORD"))
+        .option("--source <database>", "source 数据库")
+        .option("--dest <database>", "dest 数据库");
 }
 function mergeCommandOptions(options, command) {
     return {
@@ -378,6 +401,127 @@ async function resolveLexiangProfile() {
     });
     console.log(`已保存乐享环境：${profile.name}`);
     return profile;
+}
+async function runMySqlBackupFlow(options) {
+    const { connection, profileName } = await resolveMySqlConnection(options);
+    const { source, dest } = await promptMySqlBackupDatabases({
+        source: options.source,
+        dest: options.dest
+    });
+    console.log("MySQL 备份确认：");
+    console.log(`环境：${profileName ?? "临时连接"}`);
+    console.log(`连接：${connection.username}@${connection.host}:${connection.port}`);
+    console.log(`source：${source}`);
+    console.log(`dest：${dest}`);
+    const confirmed = await confirm({ message: "确认开始备份？", default: true });
+    if (!confirmed) {
+        console.log("已取消 MySQL 备份");
+        return;
+    }
+    const progress = new ProgressBar();
+    let progressStarted = false;
+    try {
+        const result = await backupMySqlDatabase({
+            connection,
+            source,
+            dest,
+            onProgress: (snapshot) => {
+                progressStarted = true;
+                progress.update({
+                    label: "MySQL 备份",
+                    currentBytes: snapshot.transferredBytes,
+                    extra: `表 ${snapshot.copiedTables}/${snapshot.totalTables}`
+                });
+            }
+        });
+        progress.done(`备份完成：${source} -> ${dest} (${formatBytes(result.transferredBytes)}，表 ${result.copiedTables}/${result.totalTables})`);
+    }
+    catch (error) {
+        if (progressStarted) {
+            progress.done("MySQL 备份失败");
+        }
+        throw error;
+    }
+}
+async function resolveMySqlConnection(options) {
+    const config = await readMySqlProfiles();
+    if (options.profile) {
+        const profile = getMySqlProfile(config, options.profile);
+        if (!profile) {
+            throw new Error(`MySQL profile 不存在：${options.profile}`);
+        }
+        return {
+            connection: mysqlConnectionFromProfile(profile, options),
+            profileName: profile.name
+        };
+    }
+    if (hasMySqlConnectionHint(options)) {
+        return {
+            connection: await promptTemporaryMySqlConnection(options)
+        };
+    }
+    const choice = await chooseMySqlProfile(config.profiles, config.defaultProfile);
+    if (choice.kind === "saved") {
+        return {
+            connection: mysqlConnectionFromProfile(choice.profile),
+            profileName: choice.profile.name
+        };
+    }
+    const answers = await promptMySqlProfile({
+        existingNames: config.profiles.map((profile) => profile.name)
+    });
+    console.warn("提示：MySQL 密码会按你的选择明文保存到 ~/.bosscli/mysql-profiles.json。");
+    const profile = await upsertMySqlProfile({
+        ...answers
+    });
+    console.log(`已保存 MySQL 环境：${profile.name}`);
+    return {
+        connection: mysqlConnectionFromProfile(profile),
+        profileName: profile.name
+    };
+}
+function mysqlConnectionFromProfile(profile, options = {}) {
+    return {
+        host: options.host ?? profile.host,
+        port: options.port ?? profile.port ?? DEFAULT_MYSQL_PORT,
+        username: options.username ?? profile.username,
+        password: options.password ?? profile.password
+    };
+}
+async function promptTemporaryMySqlConnection(options) {
+    const host = options.host ??
+        (await input({
+            message: "MySQL host",
+            default: "192.168.7.182",
+            required: true
+        }));
+    const port = options.port ??
+        (await number({
+            message: "MySQL port",
+            default: DEFAULT_MYSQL_PORT,
+            min: 1,
+            required: true
+        }));
+    const username = options.username ??
+        (await input({
+            message: "MySQL 用户名",
+            default: "root",
+            required: true
+        }));
+    const mysqlPassword = options.password ??
+        (await promptPassword({
+            message: "MySQL 密码（可空）",
+            mask: "*"
+        }));
+    return {
+        host: host.trim(),
+        port,
+        username: username.trim(),
+        password: mysqlPassword
+    };
+}
+function hasMySqlConnectionHint(options) {
+    return Boolean(options.host ?? options.port ?? options.username ?? options.password);
 }
 async function runRedisFlow(options) {
     const { client, connection, profileName } = await loginFromOptions(options);
