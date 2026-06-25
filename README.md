@@ -97,7 +97,7 @@ bosscli
 启动后会先选择功能：
 
 - k8s
-- 乐企
+- 乐企 curl
 - 乐企 SM4
 - Get Hash Code
 - Redis

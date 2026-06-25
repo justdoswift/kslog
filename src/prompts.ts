@@ -137,7 +137,7 @@ export async function chooseBosscliFeature(): Promise<BosscliFeature> {
     message: "选择功能",
     choices: [
       { name: "k8s", value: "logs" },
-      { name: "乐企", value: "leqi" },
+      { name: "乐企 curl", value: "leqi" },
       { name: "乐企 SM4", value: "leqi-sm4" },
       { name: "Get Hash Code", value: "get-hash-code" },
       { name: "Redis", value: "redis" },
