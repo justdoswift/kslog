@@ -79,3 +79,21 @@ export interface HistoryLogFile {
     path: string;
     size?: number;
 }
+export interface LeqiApiInfo {
+    apiIdentity: string;
+    apiName: string;
+    remarks?: string;
+    module?: string;
+    urlSuffix?: string;
+    useCaseCode?: string;
+    serverCode?: string;
+    abilityCode?: string;
+    sceneCode?: string;
+}
+export interface LeqiInvokePayload {
+    apiIdentity: string;
+    taxPayerNo: string;
+    testMode: number;
+    reqDTO: Record<string, unknown>;
+}
+export type LeqiAction = "curl" | "call";

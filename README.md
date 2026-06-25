@@ -94,7 +94,12 @@ npm unlink -g workctl
 workctl
 ```
 
-启动后会先选择已保存环境，或者选择“新增环境”。新增环境需要填写 `name/url/username/password`，登录成功后会自动保存并设为默认环境。
+启动后会先选择功能：
+
+- K8s 日志
+- 乐企接口
+
+进入 K8s 日志时，会选择已保存环境，或者选择“新增环境”。新增环境需要填写 `name/url/username/password`，登录成功后会自动保存并设为默认环境。
 
 验证登录：
 
@@ -146,6 +151,53 @@ workctl history \
   --workload tax-invoice-business-server \
   --date 2026-06-24 \
   --history-file /opt/saas-logs/tax-invoice-business-server-xxx.log
+```
+
+## 乐企接口
+
+进入乐企接口工具：
+
+```bash
+workctl leqi
+```
+
+接口列表从 `tax_leqi_api_info` 读取，默认库连接信息为：
+
+```text
+host: 192.168.7.195
+port: 3306
+user: root
+database: lxzsdb
+```
+
+数据库密码不会写进仓库。可以通过环境变量传入，或运行时按提示输入：
+
+```bash
+export WORKCTL_LEQI_DB_PASSWORD="..."
+workctl leqi
+```
+
+选择接口后会填写 `taxPayerNo/testMode/reqDTO`，默认操作是导出可复制 curl。也可以直达：
+
+```bash
+workctl leqi \
+  --api 200000001 \
+  --tax-payer-no 91150100397352740W \
+  --req-dto '{"ptbh":"1fc4107f168694d1efb5","nsrsbh":"91150100397352740W","sqlx":"1","sqed":20000000}' \
+  --action curl
+```
+
+如果选择直接调用，工具会登录 KubeSphere，并默认进入 `tax-digital` 下的 `tax-api-proxy-server` Pod 执行集群内 curl。可用参数覆盖：
+
+```bash
+workctl leqi \
+  --api 200000001 \
+  --tax-payer-no 91150100397352740W \
+  --req-dto '{"sqed":20000000}' \
+  --action call \
+  --profile 仿真环境 \
+  --namespace tax-digital \
+  --runner-workload tax-api-proxy-server
 ```
 
 保存环境配置：

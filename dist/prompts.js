@@ -2,6 +2,7 @@ import os from "node:os";
 import path from "node:path";
 import { checkbox, confirm, input, number, password, select } from "@inquirer/prompts";
 import { addDays, assertDateString, buildDateRange, buildDateSelection, formatLocalDate } from "./date-utils.js";
+import { formatLeqiApiChoice, parseReqDtoJson } from "./leqi.js";
 import { buildLogFileName, defaultOutputDir, formatBytes, normalizeBaseUrl } from "./utils.js";
 const NEW_PROFILE_VALUE = "__new__";
 export const DEFAULT_NAMESPACE = "tax-digital";
@@ -74,6 +75,15 @@ export async function promptNewProfileName(existingNames) {
 }
 export function preferredNamespace(namespaces, preferred = DEFAULT_NAMESPACE) {
     return namespaces.includes(preferred) ? preferred : namespaces[0];
+}
+export async function chooseWorkctlFeature() {
+    return select({
+        message: "选择功能",
+        choices: [
+            { name: "K8s 日志", value: "logs" },
+            { name: "乐企接口", value: "leqi" }
+        ]
+    });
 }
 export async function chooseNamespace(namespaces, provided) {
     if (provided) {
@@ -207,6 +217,59 @@ export async function chooseLogSource(provided) {
             { name: "历史文件日志 (/opt/saas-logs)", value: "history" }
         ]
     });
+}
+export async function chooseLeqiApi(apis, provided) {
+    if (apis.length === 0) {
+        throw new Error("没有可用的乐企接口");
+    }
+    if (provided) {
+        const api = apis.find((item) => item.apiIdentity === provided);
+        if (!api) {
+            throw new Error(`乐企接口不存在：${provided}`);
+        }
+        return api;
+    }
+    return select({
+        message: "选择乐企接口",
+        pageSize: 20,
+        choices: apis.map((api) => ({
+            name: formatLeqiApiChoice(api),
+            value: api
+        }))
+    });
+}
+export async function chooseLeqiAction(provided) {
+    if (provided) {
+        return provided;
+    }
+    return select({
+        message: "选择操作",
+        choices: [
+            { name: "导出 curl", value: "curl" },
+            { name: "直接调用", value: "call" }
+        ],
+        default: "curl"
+    });
+}
+export async function promptLeqiReqDto(provided) {
+    if (provided) {
+        return parseReqDtoJson(provided);
+    }
+    const value = await input({
+        message: "reqDTO JSON",
+        default: "{}",
+        required: true,
+        validate: (candidate) => {
+            try {
+                parseReqDtoJson(candidate);
+                return true;
+            }
+            catch (error) {
+                return error.message;
+            }
+        }
+    });
+    return parseReqDtoJson(value);
 }
 export async function chooseDateSelection(options) {
     if (options.date || options.from || options.to || options.recentDays) {

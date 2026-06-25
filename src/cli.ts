@@ -2,12 +2,14 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { confirm, input, password as promptPassword } from "@inquirer/prompts";
+import { confirm, input, number, password as promptPassword } from "@inquirer/prompts";
 import { Command, Option } from "commander";
 
 import { KubeSphereClient } from "./kubesphere-client.js";
 import {
   buildOutputPath,
+  chooseLeqiAction,
+  chooseLeqiApi,
   chooseContainer,
   chooseDateSelection,
   chooseHistoryFiles,
@@ -17,6 +19,8 @@ import {
   choosePod,
   chooseSavedProfile,
   chooseTarget,
+  chooseWorkctlFeature,
+  promptLeqiReqDto,
   promptConnection,
   promptNewProfileName
 } from "./prompts.js";
@@ -42,6 +46,20 @@ import {
   normalizeBaseUrl
 } from "./utils.js";
 import { ProgressBar } from "./progress.js";
+import {
+  buildLeqiCurl,
+  buildLeqiExecCurlCommand,
+  buildLeqiInvokePayload,
+  DEFAULT_LEQI_DB_HOST,
+  DEFAULT_LEQI_DB_NAME,
+  DEFAULT_LEQI_DB_PORT,
+  DEFAULT_LEQI_DB_USER,
+  DEFAULT_LEQI_ENDPOINT,
+  DEFAULT_LEQI_RUNNER_WORKLOAD,
+  DEFAULT_LEQI_TAX_PAYER_NO,
+  listLeqiApis,
+  type LeqiDbOptions
+} from "./leqi.js";
 
 interface ConnectionOptions {
   profile?: string;
@@ -70,17 +88,46 @@ interface DownloadOptions extends ConnectionOptions {
   historyFile?: string[];
 }
 
+interface LeqiOptions extends ConnectionOptions {
+  api?: string;
+  taxPayerNo?: string;
+  testMode?: number;
+  reqDto?: string;
+  action?: "curl" | "call";
+  endpoint?: string;
+  namespace?: string;
+  runnerWorkload?: string;
+  pod?: string;
+  container?: string;
+  dbHost?: string;
+  dbPort?: number;
+  dbUser?: string;
+  dbPassword?: string;
+  dbName?: string;
+}
+
 const program = new Command();
 
 program
   .name("workctl")
   .description("日常工作工具集 CLI")
-  .version("0.4.0");
+  .version("0.5.0");
 
 addConnectionOptions(program);
 addDownloadOptions(program);
 
 program.action(async (options: DownloadOptions) => {
+  if (hasDownloadHint(options)) {
+    await runDownloadFlow(options);
+    return;
+  }
+
+  const feature = await chooseWorkctlFeature();
+  if (feature === "leqi") {
+    await runLeqiFlow(options);
+    return;
+  }
+
   await runDownloadFlow(options);
 });
 
@@ -115,6 +162,13 @@ addConnectionOptions(history);
 addDownloadOptions(history);
 history.action(async (options: DownloadOptions, command: Command) => {
   await runDownloadFlow({ ...mergeCommandOptions<DownloadOptions>(options, command), source: "history" });
+});
+
+const leqi = program.command("leqi").description("乐企接口工具");
+addConnectionOptions(leqi);
+addLeqiOptions(leqi);
+leqi.action(async (options: LeqiOptions, command: Command) => {
+  await runLeqiFlow(mergeCommandOptions<LeqiOptions>(options, command));
 });
 
 const profile = program.command("profile").description("管理已保存的 KubeSphere 环境");
@@ -186,6 +240,25 @@ function addDownloadOptions(command: Command): void {
     .option("-o, --output-dir <dir>", "输出目录");
 }
 
+function addLeqiOptions(command: Command): void {
+  command
+    .option("--api <apiIdentity>", "乐企接口 apiIdentity")
+    .option("--tax-payer-no <taxPayerNo>", "纳税人识别号")
+    .option("--test-mode <number>", "testMode", parseNonNegativeInteger)
+    .option("--req-dto <json>", "reqDTO JSON object")
+    .addOption(new Option("--action <action>", "操作").choices(["curl", "call"]))
+    .option("--endpoint <url>", "proxy invoke 地址", DEFAULT_LEQI_ENDPOINT)
+    .option("-n, --namespace <namespace>", "执行调用的 namespace")
+    .option("--runner-workload <workload>", "执行 curl 的工作负载", DEFAULT_LEQI_RUNNER_WORKLOAD)
+    .option("--pod <pod>", "执行 curl 的 Pod 名称")
+    .option("-c, --container <container>", "执行 curl 的容器名称")
+    .addOption(new Option("--db-host <host>", "乐企接口库地址").env("WORKCTL_LEQI_DB_HOST"))
+    .addOption(new Option("--db-port <port>", "乐企接口库端口").env("WORKCTL_LEQI_DB_PORT").argParser(parsePositiveInteger))
+    .addOption(new Option("--db-user <user>", "乐企接口库用户名").env("WORKCTL_LEQI_DB_USER"))
+    .addOption(new Option("--db-password <password>", "乐企接口库密码").env("WORKCTL_LEQI_DB_PASSWORD"))
+    .addOption(new Option("--db-name <database>", "乐企接口库名").env("WORKCTL_LEQI_DB_NAME"));
+}
+
 function mergeCommandOptions<T extends object>(options: T, command: Command): T {
   return {
     ...(command.parent?.opts<Record<string, unknown>>() ?? {}),
@@ -207,6 +280,147 @@ async function runDownloadFlow(options: DownloadOptions): Promise<void> {
   }
 
   await runCurrentDownload(client, options, namespace, target, pod, container);
+}
+
+async function runLeqiFlow(options: LeqiOptions): Promise<void> {
+  const dbOptions = await resolveLeqiDbOptions(options);
+  const apis = await listLeqiApis(dbOptions);
+  const api = await chooseLeqiApi(apis, options.api);
+  const taxPayerNo =
+    options.taxPayerNo ??
+    (await input({
+      message: "taxPayerNo",
+      default: DEFAULT_LEQI_TAX_PAYER_NO,
+      required: true
+    }));
+  const testMode =
+    options.testMode ??
+    (await number({
+      message: "testMode",
+      default: 0,
+      min: 0,
+      required: true
+    }));
+  const reqDTO = await promptLeqiReqDto(options.reqDto);
+  const payload = buildLeqiInvokePayload({
+    api,
+    taxPayerNo,
+    testMode,
+    reqDTO
+  });
+  const endpoint = options.endpoint ?? DEFAULT_LEQI_ENDPOINT;
+  const curlText = buildLeqiCurl(endpoint, payload);
+  const action = await chooseLeqiAction(options.action);
+
+  console.log(`已选择：${api.apiIdentity}  ${api.apiName}`);
+
+  if (action === "curl") {
+    console.log("\n可复制 curl：");
+    console.log(curlText);
+    return;
+  }
+
+  const { client, connection } = await loginFromOptions(options);
+  const runner = await chooseLeqiRunner(client, options);
+  console.log(`已登录：${connection.username} @ ${connection.baseUrl}`);
+  console.log(
+    `执行位置：${runner.namespace} / ${runner.target.name} / ${runner.pod.name} / ${runner.container}`
+  );
+  const result = await client.execCommand({
+    namespace: runner.namespace,
+    pod: runner.pod.name,
+    container: runner.container,
+    command: buildLeqiExecCurlCommand(endpoint, payload),
+    timeoutMs: 120000
+  });
+
+  if (result.error.trim()) {
+    throw new Error(`调用失败：${result.error.trim()}`);
+  }
+
+  if (result.stderr.trim()) {
+    console.error(result.stderr.trim());
+  }
+
+  console.log(result.stdout.trim() || "(无响应内容)");
+}
+
+async function chooseLeqiRunner(client: KubeSphereClient, options: LeqiOptions): Promise<{
+  namespace: string;
+  target: KubeTarget;
+  pod: PodSummary;
+  container: string;
+}> {
+  const namespaces = await client.listNamespaces();
+  const namespace = await chooseNamespace(namespaces, options.namespace);
+  const runnerWorkload = options.runnerWorkload ?? DEFAULT_LEQI_RUNNER_WORKLOAD;
+  let target: KubeTarget;
+
+  try {
+    target = await client.resolveTarget(namespace, runnerWorkload);
+  } catch (error) {
+    if (options.runnerWorkload) {
+      throw error;
+    }
+
+    const targets = await client.listTargets(namespace);
+    target = await chooseTarget(targets);
+  }
+
+  const pods = await client.listPodsForTarget(target);
+  if (pods.length === 0) {
+    throw new Error(buildNoPodsMessage(target));
+  }
+
+  const pod = await choosePod(pods, options.pod);
+  if (pod.containers.length === 0) {
+    throw new Error(`Pod ${pod.name} 中没有可选容器`);
+  }
+
+  return {
+    namespace,
+    target,
+    pod,
+    container: await chooseContainer(pod.containers, options.container)
+  };
+}
+
+async function resolveLeqiDbOptions(options: LeqiOptions): Promise<LeqiDbOptions> {
+  const password =
+    options.dbPassword ??
+    process.env.WORKCTL_LEQI_DB_PASSWORD ??
+    (await promptPassword({
+      message: "乐企接口库密码",
+      mask: "*"
+    }));
+
+  return {
+    host: options.dbHost ?? process.env.WORKCTL_LEQI_DB_HOST ?? DEFAULT_LEQI_DB_HOST,
+    port: options.dbPort ?? Number(process.env.WORKCTL_LEQI_DB_PORT ?? DEFAULT_LEQI_DB_PORT),
+    user: options.dbUser ?? process.env.WORKCTL_LEQI_DB_USER ?? DEFAULT_LEQI_DB_USER,
+    password,
+    database: options.dbName ?? process.env.WORKCTL_LEQI_DB_NAME ?? DEFAULT_LEQI_DB_NAME
+  };
+}
+
+function hasDownloadHint(options: DownloadOptions): boolean {
+  return Boolean(
+    options.namespace ??
+      options.workload ??
+      options.service ??
+      options.pod ??
+      options.container ??
+      options.tailLines ??
+      options.sinceMinutes ??
+      options.all ??
+      options.outputDir ??
+      options.source ??
+      options.date ??
+      options.from ??
+      options.to ??
+      options.recentDays ??
+      options.historyFile
+  );
 }
 
 async function chooseKubeTarget(client: KubeSphereClient, options: DownloadOptions): Promise<{
@@ -477,6 +691,16 @@ function parsePositiveInteger(value: string): number {
 
   if (!Number.isFinite(parsed) || parsed <= 0) {
     throw new Error(`需要正整数：${value}`);
+  }
+
+  return parsed;
+}
+
+function parseNonNegativeInteger(value: string): number {
+  const parsed = Number.parseInt(value, 10);
+
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error(`需要非负整数：${value}`);
   }
 
   return parsed;
