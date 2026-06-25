@@ -23,6 +23,11 @@ const MIDDLE_DB_MOCK_URL = "https://silken-cliff-6z59.here.now/";
 const LEQI_SM4_URL = "https://snowy-tangle-qfja.here.now/";
 const GET_HASH_CODE_URL = "https://deep-garnet-bma5.here.now/";
 const FILE_SHARE_URL = "https://wormhole.app/";
+function clearInteractiveScreen() {
+    if (process.stdout.isTTY) {
+        process.stdout.write("\x1b[2J\x1b[3J\x1b[H");
+    }
+}
 program
     .name("bosscli")
     .description("日常工作工具集 CLI")
@@ -34,6 +39,7 @@ program.action(async (options) => {
         await runDownloadFlow(options);
         return;
     }
+    clearInteractiveScreen();
     let defaultFeature;
     while (true) {
         const feature = await chooseBosscliFeature(defaultFeature);

@@ -161,20 +161,23 @@ export function preferredNamespace(namespaces: string[], preferred = DEFAULT_NAM
 }
 
 export async function chooseBosscliFeature(defaultFeature?: BosscliFeature): Promise<BosscliFeature> {
+  const choices: Array<{ name: string; value: BosscliFeature }> = [
+    { name: "k8s", value: "logs" },
+    { name: "乐企 curl", value: "leqi" },
+    { name: "乐享", value: "lexiang" },
+    { name: "乐企 SM4", value: "leqi-sm4" },
+    { name: "Get Hash Code", value: "get-hash-code" },
+    { name: "Redis", value: "redis" },
+    { name: "中间库 mock", value: "middle-db-mock" },
+    { name: "文件共享", value: "file-share" },
+    { name: "退出", value: "exit" }
+  ];
+
   return select({
     message: "选择功能",
     default: defaultFeature,
-    choices: [
-      { name: "k8s", value: "logs" },
-      { name: "乐企 curl", value: "leqi" },
-      { name: "乐享", value: "lexiang" },
-      { name: "乐企 SM4", value: "leqi-sm4" },
-      { name: "Get Hash Code", value: "get-hash-code" },
-      { name: "Redis", value: "redis" },
-      { name: "中间库 mock", value: "middle-db-mock" },
-      { name: "文件共享", value: "file-share" },
-      { name: "退出", value: "exit" }
-    ]
+    choices,
+    pageSize: choices.length
   });
 }
 

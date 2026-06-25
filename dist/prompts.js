@@ -79,20 +79,22 @@ export function preferredNamespace(namespaces, preferred = DEFAULT_NAMESPACE) {
     return namespaces.includes(preferred) ? preferred : namespaces[0];
 }
 export async function chooseBosscliFeature(defaultFeature) {
+    const choices = [
+        { name: "k8s", value: "logs" },
+        { name: "乐企 curl", value: "leqi" },
+        { name: "乐享", value: "lexiang" },
+        { name: "乐企 SM4", value: "leqi-sm4" },
+        { name: "Get Hash Code", value: "get-hash-code" },
+        { name: "Redis", value: "redis" },
+        { name: "中间库 mock", value: "middle-db-mock" },
+        { name: "文件共享", value: "file-share" },
+        { name: "退出", value: "exit" }
+    ];
     return select({
         message: "选择功能",
         default: defaultFeature,
-        choices: [
-            { name: "k8s", value: "logs" },
-            { name: "乐企 curl", value: "leqi" },
-            { name: "乐享", value: "lexiang" },
-            { name: "乐企 SM4", value: "leqi-sm4" },
-            { name: "Get Hash Code", value: "get-hash-code" },
-            { name: "Redis", value: "redis" },
-            { name: "中间库 mock", value: "middle-db-mock" },
-            { name: "文件共享", value: "file-share" },
-            { name: "退出", value: "exit" }
-        ]
+        choices,
+        pageSize: choices.length
     });
 }
 export async function chooseLexiangProfile(profiles, defaultProfile) {
