@@ -279,7 +279,7 @@ MySQL 备份用于把同一 MySQL 实例里的 `source` 数据库复制到新的
 
 如果本机缺少 `mysql` 或 `mysqldump`，macOS 上会提示是否自动执行 `brew install mysql-client`；安装完成后会继续当前备份。工具也会自动识别 Homebrew 的 `mysql-client` keg-only 路径，例如 `/opt/homebrew/opt/mysql-client/bin`。
 
-如果 `dest` 数据库已经存在，工具会直接报错，不覆盖、不删除。备份时会显示已传输大小、速度、耗时和表数量进度，例如 `表 138/2289`；由于 `mysqldump` 没有可靠字节总大小，不显示百分比。
+如果 `dest` 数据库已经存在，工具会直接报错，不覆盖、不删除。备份时会优先显示表进度和耗时，例如 `MySQL 备份  表 307/3787  8%  已执行 3m07s`；下一行显示 `dump` 诊断信息，例如 `诊断：dump 1.1 MiB  dump速度 6.1KiB/s`。这里的速度是 `mysqldump` SQL 流速度，不等同于真实网络吞吐。
 
 交互模式下 `dest` 会默认生成精确到分钟的数据库名，例如 `lxzsdb_bak_202606260948`，直接回车即可使用。
 

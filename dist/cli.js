@@ -12,7 +12,7 @@ import { readLexiangProfiles, upsertLexiangProfile } from "./lexiang-profile-sto
 import { getMySqlProfile, readMySqlProfiles, upsertMySqlProfile } from "./mysql-profile-store.js";
 import { exportHistoryLogs, filterHistoryFilesByService, listHistoryFiles, statHistoryFiles } from "./history-logs.js";
 import { buildLogFileName, defaultOutputDir, formatBytes, normalizeBaseUrl } from "./utils.js";
-import { formatDuration, ProgressBar } from "./progress.js";
+import { formatDuration, formatProgressRate, formatTableProgressPercent, ProgressBar } from "./progress.js";
 import { copyToClipboard } from "./clipboard.js";
 import { buildLeqiCurl, buildLeqiExecCurlCommand, buildLeqiInvokePayload, buildLeqiReqDtoDefault, DEFAULT_LEQI_ENDPOINT, DEFAULT_LEQI_RUNNER_WORKLOAD, DEFAULT_LEQI_TAX_PAYER_NO, findLeqiReqDtoTemplate, formatLeqiReqDtoTemplateSummary, formatLeqiReqDtoTemplateSource, listLeqiApis } from "./leqi.js";
 import { buildLexiangBusinessPayloadDefault, buildLexiangCurl, formatLexiangTemplateSummary, listLexiangCatalogs, listLexiangInterfaces } from "./lexiang.js";
@@ -430,11 +430,11 @@ async function runMySqlBackupFlow(options) {
             dest,
             onProgress: (snapshot) => {
                 progressStarted = true;
-                progress.update({
-                    label: "MySQL 备份",
-                    currentBytes: snapshot.transferredBytes,
-                    extra: `表 ${snapshot.copiedTables}/${snapshot.totalTables}`
-                });
+                const elapsedMs = Date.now() - startedAt;
+                progress.updateText([
+                    `MySQL 备份  表 ${snapshot.copiedTables}/${snapshot.totalTables}  ${formatTableProgressPercent(snapshot.copiedTables, snapshot.totalTables)}  已执行 ${formatDuration(elapsedMs)}`,
+                    `诊断：dump ${formatBytes(snapshot.transferredBytes)}  dump速度 ${formatProgressRate(snapshot.transferredBytes, elapsedMs)}`
+                ].join("\n"));
             }
         });
         const elapsed = formatDuration(Date.now() - startedAt);

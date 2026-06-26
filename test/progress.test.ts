@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatDuration, formatProgressLine } from "../src/progress.js";
+import { formatDuration, formatProgressLine, formatProgressRate, formatTableProgressPercent } from "../src/progress.js";
 
 describe("progress", () => {
   it("renders known-total progress with total, current, speed, and elapsed time", () => {
@@ -29,5 +29,15 @@ describe("progress", () => {
   it("formats elapsed duration for completion summaries", () => {
     expect(formatDuration(7_000)).toBe("7s");
     expect(formatDuration(188_000)).toBe("3m08s");
+  });
+
+  it("formats diagnostic dump rates", () => {
+    expect(formatProgressRate(2048, 2000)).toBe("1KiB/s");
+  });
+
+  it("formats table progress without rounding unfinished work to 100%", () => {
+    expect(formatTableProgressPercent(307, 3787)).toBe("8%");
+    expect(formatTableProgressPercent(999, 1000)).toBe("99%");
+    expect(formatTableProgressPercent(1000, 1000)).toBe("100%");
   });
 });
