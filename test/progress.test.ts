@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatProgressLine } from "../src/progress.js";
+import { formatDuration, formatProgressLine } from "../src/progress.js";
 
 describe("progress", () => {
   it("renders known-total progress with total, current, speed, and elapsed time", () => {
@@ -24,5 +24,10 @@ describe("progress", () => {
         now: 2000
       })
     ).toBe("当前日志  2.0 KiB  速度 1KiB/s  已执行 2s");
+  });
+
+  it("formats elapsed duration for completion summaries", () => {
+    expect(formatDuration(7_000)).toBe("7s");
+    expect(formatDuration(188_000)).toBe("3m08s");
   });
 });

@@ -42,7 +42,7 @@ export function formatProgressLine(options) {
     const extra = options.extra ? `  ${options.extra}` : "";
     return `${options.label}  ${amount}  速度 ${formatRate(rate)}  已执行 ${formatDuration(elapsedMs)}${extra}`;
 }
-function formatDuration(elapsedMs) {
+export function formatDuration(elapsedMs) {
     const seconds = Math.max(0, Math.round(elapsedMs / 1000));
     if (seconds < 60) {
         return `${seconds}s`;

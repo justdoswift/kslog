@@ -15,3 +15,4 @@ export declare class ProgressBar {
     done(message: string): void;
 }
 export declare function formatProgressLine(options: ProgressRenderOptions): string;
+export declare function formatDuration(elapsedMs: number): string;

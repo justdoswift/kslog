@@ -12,7 +12,7 @@ import { readLexiangProfiles, upsertLexiangProfile } from "./lexiang-profile-sto
 import { getMySqlProfile, readMySqlProfiles, upsertMySqlProfile } from "./mysql-profile-store.js";
 import { exportHistoryLogs, filterHistoryFilesByService, listHistoryFiles, statHistoryFiles } from "./history-logs.js";
 import { buildLogFileName, defaultOutputDir, formatBytes, normalizeBaseUrl } from "./utils.js";
-import { ProgressBar } from "./progress.js";
+import { formatDuration, ProgressBar } from "./progress.js";
 import { copyToClipboard } from "./clipboard.js";
 import { buildLeqiCurl, buildLeqiExecCurlCommand, buildLeqiInvokePayload, buildLeqiReqDtoDefault, DEFAULT_LEQI_ENDPOINT, DEFAULT_LEQI_RUNNER_WORKLOAD, DEFAULT_LEQI_TAX_PAYER_NO, findLeqiReqDtoTemplate, formatLeqiReqDtoTemplateSummary, formatLeqiReqDtoTemplateSource, listLeqiApis } from "./leqi.js";
 import { buildLexiangBusinessPayloadDefault, buildLexiangCurl, formatLexiangTemplateSummary, listLexiangCatalogs, listLexiangInterfaces } from "./lexiang.js";
@@ -421,6 +421,7 @@ async function runMySqlBackupFlow(options) {
         return;
     }
     const progress = new ProgressBar();
+    const startedAt = Date.now();
     let progressStarted = false;
     try {
         const result = await backupMySqlDatabase({
@@ -436,7 +437,8 @@ async function runMySqlBackupFlow(options) {
                 });
             }
         });
-        progress.done(`备份完成：${source} -> ${dest} (${formatBytes(result.transferredBytes)}，表 ${result.copiedTables}/${result.totalTables})`);
+        const elapsed = formatDuration(Date.now() - startedAt);
+        progress.done(`备份完成：${source} -> ${dest} (${formatBytes(result.transferredBytes)}，表 ${result.copiedTables}/${result.totalTables}，耗时 ${elapsed})`);
     }
     catch (error) {
         if (progressStarted) {

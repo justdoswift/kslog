@@ -73,7 +73,7 @@ import {
   formatBytes,
   normalizeBaseUrl
 } from "./utils.js";
-import { ProgressBar } from "./progress.js";
+import { formatDuration, ProgressBar } from "./progress.js";
 import { copyToClipboard } from "./clipboard.js";
 import {
   buildLeqiCurl,
@@ -653,6 +653,7 @@ async function runMySqlBackupFlow(options: MySqlBackupCliOptions): Promise<void>
   }
 
   const progress = new ProgressBar();
+  const startedAt = Date.now();
   let progressStarted = false;
   try {
     const result = await backupMySqlDatabase({
@@ -668,8 +669,9 @@ async function runMySqlBackupFlow(options: MySqlBackupCliOptions): Promise<void>
         });
       }
     });
+    const elapsed = formatDuration(Date.now() - startedAt);
     progress.done(
-      `备份完成：${source} -> ${dest} (${formatBytes(result.transferredBytes)}，表 ${result.copiedTables}/${result.totalTables})`
+      `备份完成：${source} -> ${dest} (${formatBytes(result.transferredBytes)}，表 ${result.copiedTables}/${result.totalTables}，耗时 ${elapsed})`
     );
   } catch (error) {
     if (progressStarted) {

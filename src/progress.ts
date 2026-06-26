@@ -58,7 +58,7 @@ export function formatProgressLine(options: ProgressRenderOptions): string {
   return `${options.label}  ${amount}  速度 ${formatRate(rate)}  已执行 ${formatDuration(elapsedMs)}${extra}`;
 }
 
-function formatDuration(elapsedMs: number): string {
+export function formatDuration(elapsedMs: number): string {
   const seconds = Math.max(0, Math.round(elapsedMs / 1000));
 
   if (seconds < 60) {
