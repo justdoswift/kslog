@@ -1,12 +1,14 @@
 import os from "node:os";
 import path from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   buildDependencyManifest,
   buildDependencyOutputDir,
   buildDiscoverJarCommand,
+  buildDiscoverTopLevelArchiveCommand,
+  discoverJarCandidates,
   formatDependenciesText,
   jarPathFromJavaArgs,
   parseJarCandidateLines,
@@ -56,6 +58,35 @@ describe("dependencies", () => {
     expect(command).toContain("find '/app' -maxdepth 5 -type f \\( -name '*.jar' -o -name '*.war' \\)");
     expect(command).toContain("|| true");
     expect(command.endsWith("exit 0")).toBe(true);
+  });
+
+  it("builds top-level archive discovery shell command", () => {
+    const command = buildDiscoverTopLevelArchiveCommand(["/opt/saas"]);
+
+    expect(command).toContain("find '/opt/saas' -maxdepth 1 -type f \\( -name '*.jar' -o -name '*.war' \\)");
+    expect(command).not.toContain("/proc/[0-9]*/cmdline");
+    expect(command.endsWith("exit 0")).toBe(true);
+  });
+
+  it("uses top-level archive discovery before full recursive discovery", async () => {
+    const execCommand = vi.fn().mockResolvedValue({
+      stdout: "scan\t/opt/saas/tax-invoice-business-server.war\n",
+      stderr: "",
+      error: ""
+    });
+
+    const candidates = await discoverJarCandidates(
+      { execCommand } as never,
+      {
+        namespace: "tax-digital",
+        pod: "tax-invoice-business-server-xxx",
+        container: "container-tax-invoice-business-server"
+      }
+    );
+
+    expect(candidates).toEqual([{ source: "scan", path: "/opt/saas/tax-invoice-business-server.war" }]);
+    expect(execCommand).toHaveBeenCalledTimes(1);
+    expect(execCommand.mock.calls[0]?.[0].command[2]).toContain("-maxdepth 1");
   });
 
   it("retries transient read-only exec socket resets", async () => {

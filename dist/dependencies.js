@@ -6,7 +6,8 @@ import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import * as yauzl from "yauzl";
 import { formatBytes, sanitizeFileName, shellQuote, timestampForFile } from "./utils.js";
-export const DEFAULT_DEPENDENCY_SCAN_DIRS = ["/app", "/opt", "/deployments", "/workspace"];
+export const DEFAULT_DEPENDENCY_SCAN_DIRS = ["/app", "/opt/saas", "/opt", "/deployments", "/workspace"];
+export const DEFAULT_DEPENDENCY_TOP_LEVEL_SCAN_DIRS = ["/app", "/opt/saas", "/opt", "/deployments", "/workspace"];
 export function buildDiscoverJarCommand(scanDirs = DEFAULT_DEPENDENCY_SCAN_DIRS) {
     const findArchiveExpression = "\\( -name '*.jar' -o -name '*.war' \\)";
     return [
@@ -23,6 +24,13 @@ export function buildDiscoverJarCommand(scanDirs = DEFAULT_DEPENDENCY_SCAN_DIRS)
         "  [ -f \"$jar_path\" ] && printf 'process\\t%s\\n' \"$jar_path\"",
         "done",
         ...scanDirs.map((dir) => `if [ -d ${shellQuote(dir)} ]; then find ${shellQuote(dir)} -maxdepth 5 -type f ${findArchiveExpression} -print 2>/dev/null | sed 's/^/scan\\t/' || true; fi`),
+        "exit 0"
+    ].join("\n");
+}
+export function buildDiscoverTopLevelArchiveCommand(scanDirs = DEFAULT_DEPENDENCY_TOP_LEVEL_SCAN_DIRS) {
+    const findArchiveExpression = "\\( -name '*.jar' -o -name '*.war' \\)";
+    return [
+        ...scanDirs.map((dir) => `if [ -d ${shellQuote(dir)} ]; then find ${shellQuote(dir)} -maxdepth 1 -type f ${findArchiveExpression} -print 2>/dev/null | sed 's/^/scan\\t/' || true; fi`),
         "exit 0"
     ].join("\n");
 }
@@ -62,6 +70,17 @@ export function buildDependencyOutputDir(homeDir, target, date = new Date()) {
     return path.join(homeDir, "Downloads", "bosscli", "dependencies", sanitizeFileName(target.namespace), sanitizeFileName(target.workload), timestampForFile(date));
 }
 export async function discoverJarCandidates(client, target) {
+    const topLevelResult = await runReadOnlyExecWithRetry(() => client.execCommand({
+        namespace: target.namespace,
+        pod: target.pod,
+        container: target.container,
+        command: ["sh", "-lc", buildDiscoverTopLevelArchiveCommand()],
+        timeoutMs: 30000
+    }));
+    const topLevelCandidates = candidatesFromDiscoveryResult(topLevelResult);
+    if (topLevelCandidates.length > 0) {
+        return topLevelCandidates;
+    }
     const result = await runReadOnlyExecWithRetry(() => client.execCommand({
         namespace: target.namespace,
         pod: target.pod,
@@ -69,6 +88,9 @@ export async function discoverJarCandidates(client, target) {
         command: ["sh", "-lc", buildDiscoverJarCommand()],
         timeoutMs: 60000
     }));
+    return candidatesFromDiscoveryResult(result);
+}
+function candidatesFromDiscoveryResult(result) {
     if (result.error.trim()) {
         throw new Error(`查找 jar/war 失败：${result.error.trim()}`);
     }

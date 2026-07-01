@@ -8,9 +8,11 @@ import { pipeline } from "node:stream/promises";
 import * as yauzl from "yauzl";
 
 import { KubeSphereClient } from "./kubesphere-client.js";
+import type { ExecResult } from "./types.js";
 import { formatBytes, sanitizeFileName, shellQuote, timestampForFile } from "./utils.js";
 
-export const DEFAULT_DEPENDENCY_SCAN_DIRS = ["/app", "/opt", "/deployments", "/workspace"];
+export const DEFAULT_DEPENDENCY_SCAN_DIRS = ["/app", "/opt/saas", "/opt", "/deployments", "/workspace"];
+export const DEFAULT_DEPENDENCY_TOP_LEVEL_SCAN_DIRS = ["/app", "/opt/saas", "/opt", "/deployments", "/workspace"];
 
 export interface DependencyTarget {
   namespace: string;
@@ -88,6 +90,20 @@ export function buildDiscoverJarCommand(scanDirs = DEFAULT_DEPENDENCY_SCAN_DIRS)
   ].join("\n");
 }
 
+export function buildDiscoverTopLevelArchiveCommand(
+  scanDirs = DEFAULT_DEPENDENCY_TOP_LEVEL_SCAN_DIRS
+): string {
+  const findArchiveExpression = "\\( -name '*.jar' -o -name '*.war' \\)";
+
+  return [
+    ...scanDirs.map(
+      (dir) =>
+        `if [ -d ${shellQuote(dir)} ]; then find ${shellQuote(dir)} -maxdepth 1 -type f ${findArchiveExpression} -print 2>/dev/null | sed 's/^/scan\\t/' || true; fi`
+    ),
+    "exit 0"
+  ].join("\n");
+}
+
 export function parseJarCandidateLines(output: string): JarCandidate[] {
   const seen = new Set<string>();
   const candidates: JarCandidate[] = [];
@@ -149,6 +165,21 @@ export async function discoverJarCandidates(
   client: KubeSphereClient,
   target: Omit<DependencyTarget, "workload">
 ): Promise<JarCandidate[]> {
+  const topLevelResult = await runReadOnlyExecWithRetry(() =>
+    client.execCommand({
+      namespace: target.namespace,
+      pod: target.pod,
+      container: target.container,
+      command: ["sh", "-lc", buildDiscoverTopLevelArchiveCommand()],
+      timeoutMs: 30000
+    })
+  );
+  const topLevelCandidates = candidatesFromDiscoveryResult(topLevelResult);
+
+  if (topLevelCandidates.length > 0) {
+    return topLevelCandidates;
+  }
+
   const result = await runReadOnlyExecWithRetry(() =>
     client.execCommand({
       namespace: target.namespace,
@@ -159,6 +190,10 @@ export async function discoverJarCandidates(
     })
   );
 
+  return candidatesFromDiscoveryResult(result);
+}
+
+function candidatesFromDiscoveryResult(result: ExecResult): JarCandidate[] {
   if (result.error.trim()) {
     throw new Error(`查找 jar/war 失败：${result.error.trim()}`);
   }

@@ -1,5 +1,6 @@
 import { KubeSphereClient } from "./kubesphere-client.js";
 export declare const DEFAULT_DEPENDENCY_SCAN_DIRS: string[];
+export declare const DEFAULT_DEPENDENCY_TOP_LEVEL_SCAN_DIRS: string[];
 export interface DependencyTarget {
     namespace: string;
     workload: string;
@@ -47,6 +48,7 @@ export interface DependencyExportResult {
     dependencyCount: number;
 }
 export declare function buildDiscoverJarCommand(scanDirs?: string[]): string;
+export declare function buildDiscoverTopLevelArchiveCommand(scanDirs?: string[]): string;
 export declare function parseJarCandidateLines(output: string): JarCandidate[];
 export declare function jarPathFromJavaArgs(args: string[], cwd?: string): string | undefined;
 export declare function sortJarCandidates(candidates: JarCandidate[]): JarCandidate[];
