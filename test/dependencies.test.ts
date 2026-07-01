@@ -10,15 +10,19 @@ import {
   buildDiscoverJarCommand,
   buildDiscoverTopLevelArchiveCommand,
   buildListArchiveEntriesCommand,
+  buildSearchClassInArchiveCommand,
+  dependencyClassEntryMatches,
   dependencyEntryMatches,
   discoverJarCandidates,
   downloadRemoteFile,
   formatDependenciesText,
   jarPathFromJavaArgs,
+  parseDependencyClassSearchQuery,
   parseDependencySearchQuery,
   parseJarCandidateLines,
   parsePomProperties,
   runReadOnlyExecWithRetry,
+  searchClassInArchive,
   searchDependencyInArchive,
   sortJarCandidates,
   type DependencyJarInfo
@@ -134,6 +138,74 @@ describe("dependencies", () => {
         command: expect.arrayContaining(["sh", "-lc"])
       })
     );
+  });
+
+  it("parses class search queries and matches class entries", () => {
+    const dotted = parseDependencyClassSearchQuery("com.bosssoft.demo.SomeClass");
+    expect(dotted).toEqual({
+      raw: "com.bosssoft.demo.SomeClass",
+      classEntry: "com/bosssoft/demo/SomeClass.class"
+    });
+    expect(dependencyClassEntryMatches(dotted, "BOOT-INF/classes/com/bosssoft/demo/SomeClass.class")).toBe(true);
+    expect(dependencyClassEntryMatches(dotted, "com/bosssoft/demo/OtherClass.class")).toBe(false);
+
+    const slash = parseDependencyClassSearchQuery("java.lang.NoClassDefFoundError: com/bosssoft/demo/SomeClass");
+    expect(slash.classEntry).toBe("com/bosssoft/demo/SomeClass.class");
+
+    const classNotFound = parseDependencyClassSearchQuery(
+      "java.lang.ClassNotFoundException: com.bosssoft.demo.SomeClass"
+    );
+    expect(classNotFound.classEntry).toBe("com/bosssoft/demo/SomeClass.class");
+  });
+
+  it("builds class search command for app and nested dependency jars", () => {
+    const command = buildSearchClassInArchiveCommand("/opt/saas/server.war", "com/bosssoft/demo/SomeClass.class");
+
+    expect(command).toContain("unzip -Z1 \"$1\"");
+    expect(command).toContain("unzip -l \"$1\"");
+    expect(command).toContain("jar tf \"$archive\"");
+    expect(command).toContain("WEB-INF/lib");
+    expect(command).toContain("BOOT-INF/lib");
+    expect(command).toContain("LIB\\t");
+    expect(command).toContain("__BOSSCLI_NO_ARCHIVE_LISTER__");
+    expect(command.endsWith("exit 0")).toBe(true);
+  });
+
+  it("searches class entries in app and dependency archives", async () => {
+    const execCommand = vi.fn().mockResolvedValue({
+      stdout: [
+        "APP\tBOOT-INF/classes/com/bosssoft/demo/SomeClass.class",
+        "LIB\tBOOT-INF/lib/demo-sdk-1.0.0.jar\tcom/bosssoft/demo/SomeClass.class"
+      ].join("\n"),
+      stderr: "",
+      error: ""
+    });
+
+    const hits = await searchClassInArchive({
+      client: { execCommand } as never,
+      target: {
+        namespace: "tax-digital",
+        pod: "server-xxx",
+        container: "container-server"
+      },
+      archivePath: "/opt/saas/server.war",
+      query: parseDependencyClassSearchQuery("com.bosssoft.demo.SomeClass")
+    });
+
+    expect(hits).toEqual([
+      {
+        archivePath: "/opt/saas/server.war",
+        scope: "app",
+        entry: "/opt/saas/server.war",
+        classEntry: "BOOT-INF/classes/com/bosssoft/demo/SomeClass.class"
+      },
+      {
+        archivePath: "/opt/saas/server.war",
+        scope: "dependency",
+        entry: "BOOT-INF/lib/demo-sdk-1.0.0.jar",
+        classEntry: "com/bosssoft/demo/SomeClass.class"
+      }
+    ]);
   });
 
   it("uses top-level archive discovery before full recursive discovery", async () => {

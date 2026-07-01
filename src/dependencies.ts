@@ -87,6 +87,18 @@ export interface DependencySearchHit {
   entry: string;
 }
 
+export interface DependencyClassSearchQuery {
+  raw: string;
+  classEntry: string;
+}
+
+export interface DependencyClassSearchHit {
+  archivePath: string;
+  scope: "app" | "dependency";
+  entry: string;
+  classEntry: string;
+}
+
 const NO_ARCHIVE_LISTER_MARKER = "__BOSSCLI_NO_ARCHIVE_LISTER__";
 
 export function buildDiscoverJarCommand(scanDirs = DEFAULT_DEPENDENCY_SCAN_DIRS): string {
@@ -167,6 +179,36 @@ export function dependencyEntryMatches(query: DependencySearchQuery, entry: stri
   return query.fuzzyTerms.every((term) => normalizedFileName.includes(normalizeDependencySearchText(term)));
 }
 
+export function parseDependencyClassSearchQuery(rawQuery: string): DependencyClassSearchQuery {
+  const raw = rawQuery.trim();
+  if (!raw) {
+    throw new Error("类路径不能为空");
+  }
+
+  const extracted =
+    raw.match(/(?:ClassNotFoundException|NoClassDefFoundError)\s*:?\s*([A-Za-z0-9_.$/]+)/)?.[1] ?? raw;
+  const cleanValue = extracted
+    .trim()
+    .replace(/^class\s+/, "")
+    .replace(/^['"]|['"]$/g, "")
+    .replace(/^\//, "");
+  const classEntry = normalizeClassSearchEntry(cleanValue);
+
+  if (!classEntry || classEntry === ".class") {
+    throw new Error(`无法识别类路径：${raw}`);
+  }
+
+  return {
+    raw,
+    classEntry
+  };
+}
+
+export function dependencyClassEntryMatches(query: DependencyClassSearchQuery, entry: string): boolean {
+  const cleanEntry = entry.trim().replace(/^\//, "");
+  return cleanEntry.endsWith(query.classEntry);
+}
+
 export function buildListArchiveEntriesCommand(archivePath: string): string {
   const quotedArchivePath = shellQuote(archivePath);
   return [
@@ -174,6 +216,47 @@ export function buildListArchiveEntriesCommand(archivePath: string): string {
     `  unzip -Z1 ${quotedArchivePath} 2>/dev/null || unzip -l ${quotedArchivePath} 2>/dev/null | awk 'NR > 3 && $4 != \"\" && $4 !~ /^-+$/ { print $4 }'`,
     "elif command -v jar >/dev/null 2>&1; then",
     `  jar tf ${quotedArchivePath} 2>/dev/null`,
+    "else",
+    `  echo ${NO_ARCHIVE_LISTER_MARKER}`,
+    "fi",
+    "exit 0"
+  ].join("\n");
+}
+
+export function buildSearchClassInArchiveCommand(archivePath: string, classEntry: string): string {
+  const quotedArchivePath = shellQuote(archivePath);
+  const quotedClassEntry = shellQuote(classEntry);
+  const printMatchAwk =
+    "function endswith(s,t){return length(s)>=length(t)&&substr(s,length(s)-length(t)+1)==t} index($0,c)>0&&endswith($0,c)";
+
+  return [
+    `archive=${quotedArchivePath}`,
+    `class_entry=${quotedClassEntry}`,
+    "tmp=$(mktemp -d 2>/dev/null || mktemp -d -t bosscli-class-search)",
+    "cleanup() { rm -rf \"$tmp\"; }",
+    "trap cleanup EXIT",
+    "if command -v unzip >/dev/null 2>&1; then",
+    "  list_entries() { unzip -Z1 \"$1\" 2>/dev/null || unzip -l \"$1\" 2>/dev/null | awk 'NR > 3 && $4 != \"\" && $4 !~ /^-+$/ { print $4 }'; }",
+    "  entries=$(list_entries \"$archive\" || true)",
+    `  printf '%s\\n' "$entries" | awk -v c="$class_entry" '${printMatchAwk}{print "APP\\t"$0}'`,
+    "  printf '%s\\n' \"$entries\" | grep -E '(^|/)(BOOT-INF/lib|WEB-INF/lib|lib)/.*\\.jar$' | while IFS= read -r lib; do",
+    "    [ -n \"$lib\" ] || continue",
+    "    libfile=\"$tmp/lib.jar\"",
+    "    unzip -p \"$archive\" \"$lib\" > \"$libfile\" 2>/dev/null || continue",
+    `    list_entries "$libfile" | awk -v c="$class_entry" -v lib="$lib" '${printMatchAwk}{print "LIB\\t"lib"\\t"$0}'`,
+    "  done",
+    "elif command -v jar >/dev/null 2>&1; then",
+    "  entries=$(jar tf \"$archive\" 2>/dev/null || true)",
+    `  printf '%s\\n' "$entries" | awk -v c="$class_entry" '${printMatchAwk}{print "APP\\t"$0}'`,
+    "  printf '%s\\n' \"$entries\" | grep -E '(^|/)(BOOT-INF/lib|WEB-INF/lib|lib)/.*\\.jar$' | while IFS= read -r lib; do",
+    "    [ -n \"$lib\" ] || continue",
+    "    rm -rf \"$tmp/extract\"",
+    "    mkdir -p \"$tmp/extract\"",
+    "    (cd \"$tmp/extract\" && jar xf \"$archive\" \"$lib\") 2>/dev/null || continue",
+    "    libfile=\"$tmp/extract/$lib\"",
+    "    [ -f \"$libfile\" ] || continue",
+    `    jar tf "$libfile" 2>/dev/null | awk -v c="$class_entry" -v lib="$lib" '${printMatchAwk}{print "LIB\\t"lib"\\t"$0}'`,
+    "  done",
     "else",
     `  echo ${NO_ARCHIVE_LISTER_MARKER}`,
     "fi",
@@ -284,6 +367,52 @@ export async function searchDependencyInArchive(options: {
       archivePath: options.archivePath,
       entry
     }));
+}
+
+export async function searchClassInArchive(options: {
+  client: KubeSphereClient;
+  target: Omit<DependencyTarget, "workload">;
+  archivePath: string;
+  query: DependencyClassSearchQuery;
+}): Promise<DependencyClassSearchHit[]> {
+  const result = await runRemoteTextCommand(
+    options.client,
+    options.target,
+    buildSearchClassInArchiveCommand(options.archivePath, options.query.classEntry),
+    180000
+  );
+
+  const error = result.error.trim() || (result.stderr.trim() && !result.stdout.trim() ? result.stderr.trim() : "");
+  if (error) {
+    throw new Error(error);
+  }
+
+  if (result.stdout.includes(NO_ARCHIVE_LISTER_MARKER)) {
+    throw new Error("容器中没有 unzip 或 jar，无法在不下载应用包的情况下检索类");
+  }
+
+  const hits: DependencyClassSearchHit[] = [];
+  for (const line of result.stdout.split(/\r?\n/)) {
+    const [scope, first, second] = line.split("\t");
+    if (scope === "APP" && first && dependencyClassEntryMatches(options.query, first)) {
+      hits.push({
+        archivePath: options.archivePath,
+        scope: "app",
+        entry: options.archivePath,
+        classEntry: first
+      });
+    }
+    if (scope === "LIB" && first && second && dependencyClassEntryMatches(options.query, second)) {
+      hits.push({
+        archivePath: options.archivePath,
+        scope: "dependency",
+        entry: first,
+        classEntry: second
+      });
+    }
+  }
+
+  return hits;
 }
 
 async function runDiscoveryCommand(
@@ -913,6 +1042,12 @@ function isRecoverableDownloadError(error: unknown): boolean {
 
 function normalizeDependencySearchText(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function normalizeClassSearchEntry(value: string): string {
+  const withoutSuffix = value.endsWith(".class") ? value.slice(0, -".class".length) : value;
+  const slashValue = withoutSuffix.includes("/") ? withoutSuffix : withoutSuffix.replace(/\./g, "/");
+  return `${slashValue.replace(/^\/+/, "")}.class`;
 }
 
 class DownloadSizeMismatchError extends Error {

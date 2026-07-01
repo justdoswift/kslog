@@ -316,7 +316,7 @@ bosscli mysql-backup \
 bosscli deps
 ```
 
-依赖获取进入后会先选择 `导出依赖` 或 `检索依赖`。
+依赖获取进入后会先选择 `导出依赖`、`检索依赖包名` 或 `检索类路径`。
 
 `导出依赖` 会登录 KubeSphere，选择 namespace、工作负载、Pod 和容器后，从运行中的 Java 进程或常见目录中查找应用 jar/war。工具会把应用包下载到本机，并在本机解析 `BOOT-INF/lib`、`WEB-INF/lib`、`lib` 中的依赖 jar，不依赖容器内安装 `jar` 或 `unzip`。
 
@@ -333,6 +333,18 @@ bosscli deps \
 ```
 
 完整坐标如 `com.bosssoft:business-reimburse-sdk:1.3.20` 会优先按 `business-reimburse-sdk-1.3.20.jar` 精确匹配。这个模式依赖容器内有 `unzip` 或 `jar` 命令来列包内容；如果没有，会跳过对应目标并给出原因。
+
+`检索类路径` 用来处理 `ClassNotFoundException` / `NoClassDefFoundError` 这类“不知道类在哪个 jar 里”的场景。可以输入点号类名或报错中的斜杠路径，工具会转换成 `.class` 路径，并扫描应用包自身以及 `WEB-INF/lib`、`BOOT-INF/lib`、`lib` 下的依赖 jar：
+
+```bash
+bosscli deps \
+  --profile 测试环境 \
+  --namespace tax-digital \
+  --deps-action class \
+  --class-path com.bosssoft.example.SomeClass
+```
+
+命中时会输出服务、Pod、应用包路径，以及包含该 class 的依赖 jar。
 
 默认输出到：
 

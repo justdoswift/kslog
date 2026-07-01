@@ -6,13 +6,13 @@ import path from "node:path";
 import { confirm, input, number, password as promptPassword, select } from "@inquirer/prompts";
 import { Command, Option } from "commander";
 import { KubeSphereClient } from "./kubesphere-client.js";
-import { buildOutputPath, chooseLeqiAction, chooseLeqiApi, chooseContainer, chooseDateSelection, chooseHistoryFiles, chooseLexiangCatalog, chooseLexiangInterface, chooseLexiangNextAction, chooseLexiangProfile, chooseLogRange, chooseLogSource, chooseMySqlProfile, chooseDependencyAction, chooseJarCandidate, chooseNamespace, choosePod, chooseRedisAction, chooseRedisTargetCandidate, chooseSavedProfile, chooseTarget, chooseBosscliFeature, promptLexiangBusinessPayload, promptLexiangProfile, promptLeqiReqDto, promptConnection, promptDependencySearchQuery, promptMySqlBackupDatabases, promptMySqlProfile, promptNewProfileName, promptRedisOperation } from "./prompts.js";
+import { buildOutputPath, chooseLeqiAction, chooseLeqiApi, chooseContainer, chooseDateSelection, chooseHistoryFiles, chooseLexiangCatalog, chooseLexiangInterface, chooseLexiangNextAction, chooseLexiangProfile, chooseLogRange, chooseLogSource, chooseMySqlProfile, chooseDependencyAction, chooseJarCandidate, chooseNamespace, choosePod, chooseRedisAction, chooseRedisTargetCandidate, chooseSavedProfile, chooseTarget, chooseBosscliFeature, promptLexiangBusinessPayload, promptLexiangProfile, promptLeqiReqDto, promptConnection, promptDependencyClassQuery, promptDependencySearchQuery, promptMySqlBackupDatabases, promptMySqlProfile, promptNewProfileName, promptRedisOperation } from "./prompts.js";
 import { getProfile, readProfiles, removeProfile, setDefaultProfile, setProfileRedisConfig, setProfileRedisPassword, upsertProfile } from "./profile-store.js";
 import { readLexiangProfiles, upsertLexiangProfile } from "./lexiang-profile-store.js";
 import { getMySqlProfile, readMySqlProfiles, upsertMySqlProfile } from "./mysql-profile-store.js";
 import { exportHistoryLogs, filterHistoryFilesByService, listHistoryFiles, statHistoryFiles } from "./history-logs.js";
 import { buildLogFileName, defaultOutputDir, formatBytes, normalizeBaseUrl } from "./utils.js";
-import { buildDependencyOutputDir, discoverJarCandidates, exportJavaDependencies, parseDependencySearchQuery, searchDependencyInArchive } from "./dependencies.js";
+import { buildDependencyOutputDir, discoverJarCandidates, exportJavaDependencies, parseDependencyClassSearchQuery, parseDependencySearchQuery, searchClassInArchive, searchDependencyInArchive } from "./dependencies.js";
 import { formatDuration, formatProgressRate, formatTableProgressPercent, ProgressBar } from "./progress.js";
 import { copyToClipboard } from "./clipboard.js";
 import { buildLeqiCurl, buildLeqiExecCurlCommand, buildLeqiInvokePayload, buildLeqiReqDtoDefault, DEFAULT_LEQI_ENDPOINT, DEFAULT_LEQI_RUNNER_WORKLOAD, DEFAULT_LEQI_TAX_PAYER_NO, findLeqiReqDtoTemplate, formatLeqiReqDtoTemplateSummary, formatLeqiReqDtoTemplateSource, listLeqiApis } from "./leqi.js";
@@ -260,8 +260,9 @@ function addDepsOptions(command) {
         .option("--pod <pod>", "Pod 名称")
         .option("-c, --container <container>", "容器名称")
         .option("--jar-path <path>", "容器内应用 jar/war 路径")
-        .addOption(new Option("--deps-action <action>", "依赖操作").choices(["export", "search"]))
+        .addOption(new Option("--deps-action <action>", "依赖操作").choices(["export", "search", "class"]))
         .option("--search <query>", "检索依赖坐标或关键词，例如 business-reimburse-sdk")
+        .option("--class-path <classPath>", "检索类路径，例如 com.bosssoft.example.SomeClass")
         .option("-o, --output-dir <dir>", "输出目录");
 }
 function addMySqlBackupOptions(command) {
@@ -295,9 +296,13 @@ async function runDownloadFlow(options) {
 async function runDepsFlow(options) {
     const { client, connection } = await loginFromOptions(options);
     console.log(`已登录：${connection.username} @ ${connection.baseUrl}`);
-    const action = await chooseDependencyAction(options.depsAction ?? (options.search ? "search" : undefined));
+    const action = await chooseDependencyAction(options.depsAction ?? (options.classPath ? "class" : options.search ? "search" : undefined));
     if (action === "search") {
         await runDependencySearchFlow(client, options);
+        return;
+    }
+    if (action === "class") {
+        await runDependencyClassSearchFlow(client, options);
         return;
     }
     await runDependencyExportFlow(client, options);
@@ -479,6 +484,98 @@ async function runDependencySearchFlow(client, options) {
     progress.done(`依赖检索完成：命中 ${hits.length}，跳过 ${skipped.length}`);
     printDependencySearchResult(query.raw, hits, skipped);
 }
+async function runDependencyClassSearchFlow(client, options) {
+    const namespaces = await client.listNamespaces();
+    if (namespaces.length === 0) {
+        throw new Error("当前账号没有可见 namespace");
+    }
+    const namespace = await chooseNamespace(namespaces, options.namespace);
+    const queryText = await promptDependencyClassQuery(options.classPath);
+    const query = parseDependencyClassSearchQuery(queryText);
+    const targets = await dependencySearchTargets(client, namespace, options);
+    if (targets.length === 0) {
+        throw new Error(`namespace ${namespace} 中没有可检索的工作负载`);
+    }
+    if (!options.classPath) {
+        const shouldSearch = await confirm({
+            message: `确认开始按类路径检索 ${targets.length} 个工作负载？`,
+            default: true
+        });
+        if (!shouldSearch) {
+            console.log("已取消类路径检索");
+            return;
+        }
+    }
+    console.log("开始检索类路径：");
+    console.log(`  namespace: ${namespace}`);
+    console.log(`  query:     ${query.raw}`);
+    console.log(`  class:     ${query.classEntry}`);
+    console.log(`  workload:  ${options.workload ?? options.service ?? "全部工作负载"}`);
+    const progress = new ProgressBar();
+    const hits = [];
+    const skipped = [];
+    for (const [index, target] of targets.entries()) {
+        progress.updateText(`类路径检索  工作负载 ${index + 1}/${targets.length}  命中 ${hits.length}  当前 ${target.name}`);
+        try {
+            const pods = await client.listPodsForTarget(target);
+            if (pods.length === 0) {
+                skipped.push({ target: target.name, reason: "没有匹配的 Pod" });
+                continue;
+            }
+            const pod = options.pod ? await choosePod(pods, options.pod) : preferredScanPod(pods);
+            const containers = options.container
+                ? pod.containers.includes(options.container)
+                    ? [options.container]
+                    : []
+                : pod.containers;
+            if (containers.length === 0) {
+                skipped.push({
+                    target: target.name,
+                    reason: options.container
+                        ? `Pod ${pod.name} 中没有容器 ${options.container}`
+                        : `Pod ${pod.name} 没有可选容器`
+                });
+                continue;
+            }
+            for (const container of containers) {
+                const candidates = options.jarPath
+                    ? [{ source: "provided", path: options.jarPath }]
+                    : await discoverJarCandidates(client, {
+                        namespace,
+                        pod: pod.name,
+                        container
+                    });
+                if (candidates.length === 0) {
+                    skipped.push({ target: `${target.name}/${container}`, reason: "没有发现 jar/war" });
+                    continue;
+                }
+                for (const candidate of candidates) {
+                    const archiveHits = await searchClassInArchive({
+                        client,
+                        target: {
+                            namespace,
+                            pod: pod.name,
+                            container
+                        },
+                        archivePath: candidate.path,
+                        query
+                    });
+                    hits.push(...archiveHits.map((hit) => ({
+                        ...hit,
+                        target,
+                        pod,
+                        container
+                    })));
+                }
+            }
+        }
+        catch (error) {
+            skipped.push({ target: target.name, reason: error instanceof Error ? error.message : String(error) });
+        }
+    }
+    progress.done(`类路径检索完成：命中 ${hits.length}，跳过 ${skipped.length}`);
+    printDependencyClassSearchResult(query.raw, query.classEntry, hits, skipped);
+}
 async function dependencySearchTargets(client, namespace, options) {
     const workloadName = options.workload ?? options.service;
     if (workloadName) {
@@ -551,6 +648,66 @@ function groupDependencySearchHits(hits) {
             archivePath,
             entries: [...entries].sort()
         }))
+    }));
+}
+function printDependencyClassSearchResult(query, classEntry, hits, skipped) {
+    if (hits.length === 0) {
+        console.log(`未命中类路径：${query} (${classEntry})`);
+    }
+    else {
+        console.log(`命中类路径：${query} (${classEntry})`);
+        const groupedHits = groupDependencyClassSearchHits(hits);
+        for (const group of groupedHits) {
+            console.log(`\n${group.namespace} / ${group.workload}`);
+            console.log(`  Pod：${group.pod}`);
+            console.log(`  容器：${group.container}`);
+            console.log(`  应用包：${group.archivePath}`);
+            for (const hit of group.hits) {
+                const label = hit.scope === "app" ? "应用类" : "依赖包";
+                console.log(`  ${label}：${hit.entry}`);
+                console.log(`    - ${hit.classEntry}`);
+            }
+        }
+    }
+    if (skipped.length > 0) {
+        console.log(`\n跳过 ${skipped.length} 个目标：`);
+        for (const item of skipped.slice(0, 20)) {
+            console.log(`- ${item.target}: ${item.reason}`);
+        }
+        if (skipped.length > 20) {
+            console.log(`... 还有 ${skipped.length - 20} 个跳过目标`);
+        }
+    }
+}
+function groupDependencyClassSearchHits(hits) {
+    const groups = new Map();
+    for (const hit of hits) {
+        const key = `${hit.target.namespace}\0${hit.target.name}\0${hit.pod.name}\0${hit.container}\0${hit.archivePath}`;
+        let group = groups.get(key);
+        if (!group) {
+            group = {
+                namespace: hit.target.namespace,
+                workload: hit.target.name,
+                pod: hit.pod.name,
+                container: hit.container,
+                archivePath: hit.archivePath,
+                hitMap: new Map()
+            };
+            groups.set(key, group);
+        }
+        group.hitMap.set(`${hit.scope}\0${hit.entry}\0${hit.classEntry}`, {
+            scope: hit.scope,
+            entry: hit.entry,
+            classEntry: hit.classEntry
+        });
+    }
+    return [...groups.values()].map((group) => ({
+        namespace: group.namespace,
+        workload: group.workload,
+        pod: group.pod,
+        container: group.container,
+        archivePath: group.archivePath,
+        hits: [...group.hitMap.values()].sort((left, right) => left.entry.localeCompare(right.entry))
     }));
 }
 async function runLeqiFlow(options) {

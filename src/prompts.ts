@@ -61,7 +61,7 @@ export type BosscliFeature =
   | "exit";
 export type RedisActionChoice = RedisAction | "switch-db" | "back";
 export type LexiangNextAction = "continue" | "switch-catalog" | "switch-profile" | "home" | "exit";
-export type DependencyAction = "export" | "search";
+export type DependencyAction = "export" | "search" | "class";
 
 export type ProfileChoice =
   | {
@@ -212,7 +212,8 @@ export async function chooseDependencyAction(provided?: DependencyAction): Promi
     message: "选择依赖操作",
     choices: [
       { name: "导出依赖", value: "export" },
-      { name: "检索依赖", value: "search" }
+      { name: "检索依赖包名", value: "search" },
+      { name: "检索类路径", value: "class" }
     ]
   });
 }
@@ -225,6 +226,19 @@ export async function promptDependencySearchQuery(provided?: string): Promise<st
   const value = await input({
     message: "依赖坐标或关键词",
     default: "com.bosssoft:business-reimburse-sdk:1.3.20",
+    required: true
+  });
+  return value.trim();
+}
+
+export async function promptDependencyClassQuery(provided?: string): Promise<string> {
+  if (provided?.trim()) {
+    return provided.trim();
+  }
+
+  const value = await input({
+    message: "类路径",
+    default: "com.bosssoft.example.SomeClass",
     required: true
   });
   return value.trim();

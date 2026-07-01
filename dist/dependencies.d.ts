@@ -65,11 +65,24 @@ export interface DependencySearchHit {
     archivePath: string;
     entry: string;
 }
+export interface DependencyClassSearchQuery {
+    raw: string;
+    classEntry: string;
+}
+export interface DependencyClassSearchHit {
+    archivePath: string;
+    scope: "app" | "dependency";
+    entry: string;
+    classEntry: string;
+}
 export declare function buildDiscoverJarCommand(scanDirs?: string[]): string;
 export declare function buildDiscoverTopLevelArchiveCommand(scanDirs?: string[]): string;
 export declare function parseDependencySearchQuery(rawQuery: string): DependencySearchQuery;
 export declare function dependencyEntryMatches(query: DependencySearchQuery, entry: string): boolean;
+export declare function parseDependencyClassSearchQuery(rawQuery: string): DependencyClassSearchQuery;
+export declare function dependencyClassEntryMatches(query: DependencyClassSearchQuery, entry: string): boolean;
 export declare function buildListArchiveEntriesCommand(archivePath: string): string;
+export declare function buildSearchClassInArchiveCommand(archivePath: string, classEntry: string): string;
 export declare function parseJarCandidateLines(output: string): JarCandidate[];
 export declare function jarPathFromJavaArgs(args: string[], cwd?: string): string | undefined;
 export declare function sortJarCandidates(candidates: JarCandidate[]): JarCandidate[];
@@ -81,6 +94,12 @@ export declare function searchDependencyInArchive(options: {
     archivePath: string;
     query: DependencySearchQuery;
 }): Promise<DependencySearchHit[]>;
+export declare function searchClassInArchive(options: {
+    client: KubeSphereClient;
+    target: Omit<DependencyTarget, "workload">;
+    archivePath: string;
+    query: DependencyClassSearchQuery;
+}): Promise<DependencyClassSearchHit[]>;
 export declare function runReadOnlyExecWithRetry<T>(operation: () => Promise<T>, options?: {
     attempts?: number;
     delayMs?: number;

@@ -108,7 +108,8 @@ export async function chooseDependencyAction(provided) {
         message: "选择依赖操作",
         choices: [
             { name: "导出依赖", value: "export" },
-            { name: "检索依赖", value: "search" }
+            { name: "检索依赖包名", value: "search" },
+            { name: "检索类路径", value: "class" }
         ]
     });
 }
@@ -119,6 +120,17 @@ export async function promptDependencySearchQuery(provided) {
     const value = await input({
         message: "依赖坐标或关键词",
         default: "com.bosssoft:business-reimburse-sdk:1.3.20",
+        required: true
+    });
+    return value.trim();
+}
+export async function promptDependencyClassQuery(provided) {
+    if (provided?.trim()) {
+        return provided.trim();
+    }
+    const value = await input({
+        message: "类路径",
+        default: "com.bosssoft.example.SomeClass",
         required: true
     });
     return value.trim();
