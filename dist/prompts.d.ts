@@ -1,5 +1,6 @@
 import type { DateSelection, HistoryLogFile, LexiangBusinessPayload, LexiangInterfaceInfo, LexiangProfile, KubeTarget, LeqiAction, LeqiApiInfo, LeqiReqDto, LogRange, LogSource, MySqlProfile, PodSummary, SavedProfile } from "./types.js";
 import { type RedisAction, type RedisConnection, type RedisOperation } from "./redis.js";
+import type { JarCandidate } from "./dependencies.js";
 import { type LexiangCatalogInfo } from "./lexiang.js";
 import { type MySqlConnection } from "./mysql-backup.js";
 export declare const DEFAULT_NAMESPACE = "tax-digital";
@@ -9,7 +10,7 @@ export interface ConnectionAnswers {
     password: string;
     insecure?: boolean;
 }
-export type BosscliFeature = "logs" | "leqi" | "lexiang" | "leqi-sm4" | "get-hash-code" | "redis" | "mysql-backup" | "middle-db-mock" | "file-share" | "exit";
+export type BosscliFeature = "logs" | "leqi" | "lexiang" | "leqi-sm4" | "get-hash-code" | "redis" | "mysql-backup" | "deps" | "middle-db-mock" | "file-share" | "exit";
 export type RedisActionChoice = RedisAction | "switch-db" | "back";
 export type LexiangNextAction = "continue" | "switch-catalog" | "switch-profile" | "home" | "exit";
 export type ProfileChoice = {
@@ -72,6 +73,7 @@ export declare function chooseRedisTargetCandidate(targets: KubeTarget[]): Promi
 export declare function formatTargetChoice(target: KubeTarget): string;
 export declare function choosePod(pods: PodSummary[], provided?: string): Promise<PodSummary>;
 export declare function chooseContainer(containers: string[], provided?: string): Promise<string>;
+export declare function chooseJarCandidate(candidates: JarCandidate[], provided?: string): Promise<string>;
 export declare function chooseLogRange(options: {
     tailLines?: number;
     sinceMinutes?: number;

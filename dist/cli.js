@@ -6,12 +6,13 @@ import path from "node:path";
 import { confirm, input, number, password as promptPassword, select } from "@inquirer/prompts";
 import { Command, Option } from "commander";
 import { KubeSphereClient } from "./kubesphere-client.js";
-import { buildOutputPath, chooseLeqiAction, chooseLeqiApi, chooseContainer, chooseDateSelection, chooseHistoryFiles, chooseLexiangCatalog, chooseLexiangInterface, chooseLexiangNextAction, chooseLexiangProfile, chooseLogRange, chooseLogSource, chooseMySqlProfile, chooseNamespace, choosePod, chooseRedisAction, chooseRedisTargetCandidate, chooseSavedProfile, chooseTarget, chooseBosscliFeature, promptLexiangBusinessPayload, promptLexiangProfile, promptLeqiReqDto, promptConnection, promptMySqlBackupDatabases, promptMySqlProfile, promptNewProfileName, promptRedisOperation } from "./prompts.js";
+import { buildOutputPath, chooseLeqiAction, chooseLeqiApi, chooseContainer, chooseDateSelection, chooseHistoryFiles, chooseLexiangCatalog, chooseLexiangInterface, chooseLexiangNextAction, chooseLexiangProfile, chooseLogRange, chooseLogSource, chooseMySqlProfile, chooseJarCandidate, chooseNamespace, choosePod, chooseRedisAction, chooseRedisTargetCandidate, chooseSavedProfile, chooseTarget, chooseBosscliFeature, promptLexiangBusinessPayload, promptLexiangProfile, promptLeqiReqDto, promptConnection, promptMySqlBackupDatabases, promptMySqlProfile, promptNewProfileName, promptRedisOperation } from "./prompts.js";
 import { getProfile, readProfiles, removeProfile, setDefaultProfile, setProfileRedisConfig, setProfileRedisPassword, upsertProfile } from "./profile-store.js";
 import { readLexiangProfiles, upsertLexiangProfile } from "./lexiang-profile-store.js";
 import { getMySqlProfile, readMySqlProfiles, upsertMySqlProfile } from "./mysql-profile-store.js";
 import { exportHistoryLogs, filterHistoryFilesByService, listHistoryFiles, statHistoryFiles } from "./history-logs.js";
 import { buildLogFileName, defaultOutputDir, formatBytes, normalizeBaseUrl } from "./utils.js";
+import { buildDependencyOutputDir, discoverJarCandidates, exportJavaDependencies } from "./dependencies.js";
 import { formatDuration, formatProgressRate, formatTableProgressPercent, ProgressBar } from "./progress.js";
 import { copyToClipboard } from "./clipboard.js";
 import { buildLeqiCurl, buildLeqiExecCurlCommand, buildLeqiInvokePayload, buildLeqiReqDtoDefault, DEFAULT_LEQI_ENDPOINT, DEFAULT_LEQI_RUNNER_WORKLOAD, DEFAULT_LEQI_TAX_PAYER_NO, findLeqiReqDtoTemplate, formatLeqiReqDtoTemplateSummary, formatLeqiReqDtoTemplateSource, listLeqiApis } from "./leqi.js";
@@ -71,6 +72,11 @@ program.action(async (options) => {
         }
         if (feature === "mysql-backup") {
             await runMySqlBackupFlow({});
+            console.log("");
+            continue;
+        }
+        if (feature === "deps") {
+            await runDepsFlow(options);
             console.log("");
             continue;
         }
@@ -142,6 +148,12 @@ addConnectionOptions(redis);
 addRedisOptions(redis);
 redis.action(async (options, command) => {
     await runRedisFlow(mergeCommandOptions(options, command));
+});
+const deps = program.command("deps").description("获取 Java 服务依赖 jar");
+addConnectionOptions(deps);
+addDepsOptions(deps);
+deps.action(async (options, command) => {
+    await runDepsFlow(mergeCommandOptions(options, command));
 });
 const mysqlBackup = program.command("mysql-backup").description("复制 MySQL 数据库到同实例新库");
 addMySqlBackupOptions(mysqlBackup);
@@ -240,6 +252,16 @@ function addRedisOptions(command) {
         .option("--pattern <pattern>", "SCAN 使用的 key pattern")
         .option("--redis-command <command>", "自定义 Redis 命令，例如 TTL my:key");
 }
+function addDepsOptions(command) {
+    command
+        .option("-n, --namespace <namespace>", "namespace")
+        .option("-w, --workload <workload>", "工作负载名称")
+        .option("-s, --service <service>", "工作负载名称（兼容旧参数）")
+        .option("--pod <pod>", "Pod 名称")
+        .option("-c, --container <container>", "容器名称")
+        .option("--jar-path <path>", "容器内应用 jar 路径")
+        .option("-o, --output-dir <dir>", "输出目录");
+}
 function addMySqlBackupOptions(command) {
     command
         .addOption(new Option("--profile <name>", "使用已保存的 MySQL 环境").env("BOSSCLI_MYSQL_PROFILE"))
@@ -267,6 +289,62 @@ async function runDownloadFlow(options) {
         return;
     }
     await runCurrentDownload(client, options, namespace, target, pod, container);
+}
+async function runDepsFlow(options) {
+    const { client, connection } = await loginFromOptions(options);
+    console.log(`已登录：${connection.username} @ ${connection.baseUrl}`);
+    const { namespace, target, pod, container } = await chooseKubeTarget(client, options);
+    const candidates = options.jarPath
+        ? []
+        : await discoverJarCandidates(client, {
+            namespace,
+            pod: pod.name,
+            container
+        });
+    const remoteJarPath = await chooseJarCandidate(candidates, options.jarPath);
+    const outputRoot = options.outputDir ??
+        buildDependencyOutputDir(process.env.HOME ?? "", {
+            namespace,
+            workload: target.name
+        });
+    console.log("开始获取依赖：");
+    console.log(`  namespace: ${namespace}`);
+    console.log(`  workload:  ${target.name}`);
+    console.log(`  pod:       ${pod.name}`);
+    console.log(`  container: ${container}`);
+    console.log(`  jar:       ${remoteJarPath}`);
+    console.log(`  output:    ${outputRoot}`);
+    const progress = new ProgressBar();
+    let progressStarted = false;
+    try {
+        const result = await exportJavaDependencies({
+            client,
+            target: {
+                namespace,
+                workload: target.name,
+                pod: pod.name,
+                container
+            },
+            remoteJarPath,
+            outputRoot,
+            onProgress: (message) => {
+                progressStarted = true;
+                progress.updateText(`依赖获取  ${message}`);
+            }
+        });
+        progress.done(`依赖获取完成：${result.outputDir}`);
+        console.log(`应用 jar：${result.appJarPath}`);
+        console.log(`依赖目录：${result.libsDir}`);
+        console.log(`依赖数量：${result.dependencyCount}`);
+        console.log(`清单：${result.dependenciesPath}`);
+        console.log(`Manifest：${result.manifestPath}`);
+    }
+    catch (error) {
+        if (progressStarted) {
+            progress.done("依赖获取失败");
+        }
+        throw error;
+    }
 }
 async function runLeqiFlow(options) {
     const apis = listLeqiApis();

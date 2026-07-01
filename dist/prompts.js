@@ -88,6 +88,7 @@ export async function chooseBosscliFeature(defaultFeature) {
         { name: "Get Hash Code", value: "get-hash-code" },
         { name: "Redis", value: "redis" },
         { name: "MySQL 备份", value: "mysql-backup" },
+        { name: "依赖获取", value: "deps" },
         { name: "中间库 mock", value: "middle-db-mock" },
         { name: "文件共享", value: "file-share" },
         { name: "退出", value: "exit" }
@@ -429,6 +430,25 @@ export async function chooseContainer(containers, provided) {
         choices: containers.map((container) => ({
             name: container,
             value: container
+        }))
+    });
+}
+export async function chooseJarCandidate(candidates, provided) {
+    if (provided) {
+        return provided;
+    }
+    if (candidates.length === 0) {
+        throw new Error("没有找到可用的 Java 应用 jar，请使用 --jar-path 指定");
+    }
+    if (candidates.length === 1) {
+        return candidates[0].path;
+    }
+    return select({
+        message: "选择应用 jar",
+        pageSize: 12,
+        choices: candidates.map((candidate) => ({
+            name: `${candidate.path}  ${candidate.source === "process" ? "Java 进程" : "扫描发现"}`,
+            value: candidate.path
         }))
     });
 }

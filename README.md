@@ -109,6 +109,7 @@ bosscli
 - Get Hash Code
 - Redis
 - MySQL 备份
+- 依赖获取
 - 中间库 mock
 - 文件共享
 - 退出
@@ -306,6 +307,41 @@ bosscli mysql-backup \
 ```
 
 也可以用 `BOSSCLI_MYSQL_PASSWORD` 提供密码，避免把密码写在命令行参数里。
+
+## 依赖获取
+
+进入 Java 服务依赖获取工具：
+
+```bash
+bosscli deps
+```
+
+依赖获取会登录 KubeSphere，选择 namespace、工作负载、Pod 和容器后，从运行中的 Java 进程或常见目录中查找应用 jar。工具会把应用 jar 下载到本机，并在本机解析 `BOOT-INF/lib`、`WEB-INF/lib`、`lib` 中的依赖 jar，不依赖容器内安装 `jar` 或 `unzip`。
+
+默认输出到：
+
+```text
+~/Downloads/bosscli/dependencies/<namespace>/<workload>/<timestamp>/
+```
+
+目录里会包含：
+
+```text
+app/<service>.jar
+libs/*.jar
+dependencies.txt
+manifest.json
+```
+
+也可以直达：
+
+```bash
+bosscli deps \
+  --profile 测试环境 \
+  --namespace tax-digital \
+  --workload tax-api-proxy-server \
+  --jar-path /app/tax-api-proxy-server.jar
+```
 
 保存环境配置：
 
