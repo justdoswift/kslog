@@ -1,4 +1,5 @@
 import os from "node:os";
+import fsp from "node:fs/promises";
 import path from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
@@ -9,6 +10,7 @@ import {
   buildDiscoverJarCommand,
   buildDiscoverTopLevelArchiveCommand,
   discoverJarCandidates,
+  downloadRemoteFile,
   formatDependenciesText,
   jarPathFromJavaArgs,
   parseJarCandidateLines,
@@ -104,6 +106,48 @@ describe("dependencies", () => {
 
     expect(result).toBe("ok");
     expect(attempts).toBe(3);
+  });
+
+  it("falls back when direct dependency download is truncated", async () => {
+    const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), "bosscli-deps-"));
+    const outputPath = path.join(tempDir, "app.war");
+    const fullContent = Buffer.from("complete application archive");
+    const partialContent = fullContent.subarray(0, 8);
+    let usedFallback = false;
+
+    const client = {
+      execCommand: vi.fn().mockResolvedValue({
+        stdout: `${fullContent.length}\n`,
+        stderr: "",
+        error: ""
+      }),
+      streamExecOutput: vi.fn(async (options: { onStdout: (chunk: Buffer) => Promise<void> }) => {
+        await options.onStdout(partialContent);
+      }),
+      streamInteractiveShell: vi.fn(async (options: { inputLines: string[]; onStdout: (chunk: Buffer) => Promise<void> }) => {
+        usedFallback = true;
+        const command = options.inputLines[0] ?? "";
+        const token = command.match(/BEGIN_%s__\\n' ([a-f0-9]+)/)?.[1];
+        expect(token).toBeTruthy();
+        await options.onStdout(Buffer.from(`\n__BOSSCLI_BEGIN_${token}__\n`));
+        await options.onStdout(Buffer.from(fullContent.toString("base64")));
+        await options.onStdout(Buffer.from(`\n__BOSSCLI_END_${token}__:0\n`));
+      })
+    };
+
+    await downloadRemoteFile({
+      client: client as never,
+      target: {
+        namespace: "tax-digital",
+        pod: "server-xxx",
+        container: "container-server"
+      },
+      remotePath: "/opt/saas/server.war",
+      outputPath
+    });
+
+    await expect(fsp.readFile(outputPath)).resolves.toEqual(fullContent);
+    expect(usedFallback).toBe(true);
   });
 
   it("does not retry non-transient read-only exec errors", async () => {

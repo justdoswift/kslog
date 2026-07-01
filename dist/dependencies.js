@@ -79,6 +79,9 @@ export async function discoverJarCandidates(client, target) {
     return candidatesFromDiscoveryResult(result);
 }
 async function runDiscoveryCommand(client, target, command, timeoutMs) {
+    return runRemoteTextCommand(client, target, command, timeoutMs);
+}
+async function runRemoteTextCommand(client, target, command, timeoutMs) {
     try {
         return await runReadOnlyExecWithRetry(() => client.execCommand({
             namespace: target.namespace,
@@ -172,15 +175,46 @@ export async function exportJavaDependencies(options) {
     };
 }
 export async function downloadRemoteFile(options) {
+    const expectedSize = await getRemoteFileSize(options);
     try {
         await downloadRemoteFileDirect(options);
+        await assertDownloadedSize(options.outputPath, expectedSize);
     }
     catch (error) {
-        if (!isTransientExecError(error)) {
+        if (!isRecoverableDownloadError(error)) {
             throw error;
         }
         await fsp.rm(options.outputPath, { force: true });
         await downloadRemoteFileViaInteractiveBase64(options);
+        await assertDownloadedSize(options.outputPath, expectedSize);
+    }
+}
+async function getRemoteFileSize(options) {
+    const command = [
+        `if command -v stat >/dev/null 2>&1; then stat -c '%s' -- ${shellQuote(options.remotePath)} 2>/dev/null`,
+        `|| wc -c < ${shellQuote(options.remotePath)}`,
+        `else wc -c < ${shellQuote(options.remotePath)}; fi`
+    ].join(" ");
+    try {
+        const result = await runRemoteTextCommand(options.client, options.target, command, 30000);
+        const error = result.error.trim() || result.stderr.trim();
+        if (error) {
+            return undefined;
+        }
+        const match = result.stdout.match(/\d+/);
+        return match ? Number(match[0]) : undefined;
+    }
+    catch {
+        return undefined;
+    }
+}
+async function assertDownloadedSize(outputPath, expectedSize) {
+    if (expectedSize === undefined || !Number.isFinite(expectedSize)) {
+        return;
+    }
+    const stats = await fsp.stat(outputPath);
+    if (stats.size !== expectedSize) {
+        throw new DownloadSizeMismatchError(`下载应用包大小不一致：本地 ${stats.size} bytes，远端 ${expectedSize} bytes`);
     }
 }
 async function downloadRemoteFileDirect(options) {
@@ -501,6 +535,15 @@ function isLikelyAppArchive(filePath) {
 function isTransientExecError(error) {
     const message = error instanceof Error ? error.message : String(error);
     return /socket hang up|ECONNRESET|WebSocket was closed before the connection was established/i.test(message);
+}
+function isRecoverableDownloadError(error) {
+    return error instanceof DownloadSizeMismatchError || isTransientExecError(error);
+}
+class DownloadSizeMismatchError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = "DownloadSizeMismatchError";
+    }
 }
 function stripTrailingExitZero(command) {
     return command.replace(/\nexit 0\s*$/, "");
