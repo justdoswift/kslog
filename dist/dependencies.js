@@ -70,25 +70,40 @@ export function buildDependencyOutputDir(homeDir, target, date = new Date()) {
     return path.join(homeDir, "Downloads", "bosscli", "dependencies", sanitizeFileName(target.namespace), sanitizeFileName(target.workload), timestampForFile(date));
 }
 export async function discoverJarCandidates(client, target) {
-    const topLevelResult = await runReadOnlyExecWithRetry(() => client.execCommand({
-        namespace: target.namespace,
-        pod: target.pod,
-        container: target.container,
-        command: ["sh", "-lc", buildDiscoverTopLevelArchiveCommand()],
-        timeoutMs: 30000
-    }));
+    const topLevelResult = await runDiscoveryCommand(client, target, buildDiscoverTopLevelArchiveCommand(), 30000);
     const topLevelCandidates = candidatesFromDiscoveryResult(topLevelResult);
     if (topLevelCandidates.length > 0) {
         return topLevelCandidates;
     }
-    const result = await runReadOnlyExecWithRetry(() => client.execCommand({
-        namespace: target.namespace,
-        pod: target.pod,
-        container: target.container,
-        command: ["sh", "-lc", buildDiscoverJarCommand()],
-        timeoutMs: 60000
-    }));
+    const result = await runDiscoveryCommand(client, target, buildDiscoverJarCommand(), 60000);
     return candidatesFromDiscoveryResult(result);
+}
+async function runDiscoveryCommand(client, target, command, timeoutMs) {
+    try {
+        return await runReadOnlyExecWithRetry(() => client.execCommand({
+            namespace: target.namespace,
+            pod: target.pod,
+            container: target.container,
+            command: ["sh", "-lc", command],
+            timeoutMs
+        }));
+    }
+    catch (error) {
+        if (!isTransientExecError(error)) {
+            throw error;
+        }
+        const result = await execTextViaInteractiveShell({
+            client,
+            target,
+            command: stripTrailingExitZero(command),
+            timeoutMs: timeoutMs * 2
+        });
+        return {
+            stdout: result.stdout,
+            stderr: "",
+            error: result.exitStatus === "0" ? "" : `交互式 exec 退出码 ${result.exitStatus ?? "unknown"}`
+        };
+    }
 }
 function candidatesFromDiscoveryResult(result) {
     if (result.error.trim()) {
@@ -157,6 +172,18 @@ export async function exportJavaDependencies(options) {
     };
 }
 export async function downloadRemoteFile(options) {
+    try {
+        await downloadRemoteFileDirect(options);
+    }
+    catch (error) {
+        if (!isTransientExecError(error)) {
+            throw error;
+        }
+        await fsp.rm(options.outputPath, { force: true });
+        await downloadRemoteFileViaInteractiveBase64(options);
+    }
+}
+async function downloadRemoteFileDirect(options) {
     const output = fs.createWriteStream(options.outputPath);
     const stderrChunks = [];
     const errorChunks = [];
@@ -190,6 +217,157 @@ export async function downloadRemoteFile(options) {
         await fsp.rm(options.outputPath, { force: true });
         throw new Error(`下载应用包失败：${error || stderr}`);
     }
+}
+async function downloadRemoteFileViaInteractiveBase64(options) {
+    const output = fs.createWriteStream(options.outputPath);
+    const token = crypto.randomUUID().replace(/-/g, "");
+    const beginMarker = `__BOSSCLI_BEGIN_${token}__`;
+    const endMarker = `__BOSSCLI_END_${token}__:`;
+    let mode = "waiting";
+    let textBuffer = "";
+    let base64Remainder = "";
+    let exitStatus;
+    let foundEnd = false;
+    const writeDecodedBase64 = async (text, final = false) => {
+        const cleanText = `${base64Remainder}${text}`.replace(/[^A-Za-z0-9+/=]/g, "");
+        const decodeLength = final ? cleanText.length : cleanText.length - (cleanText.length % 4);
+        if (decodeLength > 0) {
+            const decoded = Buffer.from(cleanText.slice(0, decodeLength), "base64");
+            if (!output.write(decoded)) {
+                await once(output, "drain");
+            }
+        }
+        base64Remainder = cleanText.slice(decodeLength);
+    };
+    const consumeStdout = async (chunk) => {
+        textBuffer += chunk.toString("utf8");
+        while (true) {
+            if (mode === "waiting") {
+                const beginIndex = textBuffer.indexOf(beginMarker);
+                if (beginIndex === -1) {
+                    textBuffer = textBuffer.slice(-beginMarker.length);
+                    return;
+                }
+                textBuffer = textBuffer.slice(beginIndex + beginMarker.length);
+                mode = "capturing";
+            }
+            if (mode === "capturing") {
+                const endIndex = textBuffer.indexOf(endMarker);
+                if (endIndex === -1) {
+                    const keepLength = endMarker.length + 16;
+                    const processLength = Math.max(0, textBuffer.length - keepLength);
+                    if (processLength > 0) {
+                        await writeDecodedBase64(textBuffer.slice(0, processLength));
+                        textBuffer = textBuffer.slice(processLength);
+                    }
+                    return;
+                }
+                await writeDecodedBase64(textBuffer.slice(0, endIndex), true);
+                const statusMatch = textBuffer.slice(endIndex + endMarker.length).match(/^(\d+)/);
+                exitStatus = statusMatch?.[1];
+                textBuffer = "";
+                mode = "done";
+                foundEnd = true;
+                return;
+            }
+            return;
+        }
+    };
+    const command = [
+        `printf '\\n__BOSSCLI_BEGIN_%s__\\n' ${token}`,
+        `base64 ${shellQuote(options.remotePath)}`,
+        "status=$?",
+        `printf '\\n__BOSSCLI_END_%s__:%s\\n' ${token} \"$status\"`,
+        "exit"
+    ].join("; ");
+    try {
+        await options.client.streamInteractiveShell({
+            namespace: options.target.namespace,
+            pod: options.target.pod,
+            container: options.target.container,
+            inputLines: [command],
+            timeoutMs: 1800000,
+            onStdout: consumeStdout
+        });
+    }
+    finally {
+        output.end();
+        await once(output, "close");
+    }
+    if (!foundEnd) {
+        await fsp.rm(options.outputPath, { force: true });
+        throw new Error("下载应用包失败：交互式 base64 下载没有收到结束标记");
+    }
+    if (exitStatus !== "0") {
+        await fsp.rm(options.outputPath, { force: true });
+        throw new Error(`下载应用包失败：base64 退出码 ${exitStatus ?? "unknown"}`);
+    }
+}
+async function execTextViaInteractiveShell(options) {
+    const token = crypto.randomUUID().replace(/-/g, "");
+    const beginMarker = `__BOSSCLI_BEGIN_${token}__`;
+    const endMarker = `__BOSSCLI_END_${token}__:`;
+    let mode = "waiting";
+    let textBuffer = "";
+    let stdout = "";
+    let exitStatus;
+    let foundEnd = false;
+    const consumeStdout = (chunk) => {
+        textBuffer += chunk.toString("utf8");
+        while (true) {
+            if (mode === "waiting") {
+                const beginIndex = textBuffer.indexOf(beginMarker);
+                if (beginIndex === -1) {
+                    textBuffer = textBuffer.slice(-beginMarker.length);
+                    return;
+                }
+                textBuffer = textBuffer.slice(beginIndex + beginMarker.length);
+                mode = "capturing";
+            }
+            if (mode === "capturing") {
+                const endIndex = textBuffer.indexOf(endMarker);
+                if (endIndex === -1) {
+                    const keepLength = endMarker.length + 16;
+                    const processLength = Math.max(0, textBuffer.length - keepLength);
+                    if (processLength > 0) {
+                        stdout += textBuffer.slice(0, processLength);
+                        textBuffer = textBuffer.slice(processLength);
+                    }
+                    return;
+                }
+                stdout += textBuffer.slice(0, endIndex);
+                const statusMatch = textBuffer.slice(endIndex + endMarker.length).match(/^(\d+)/);
+                exitStatus = statusMatch?.[1];
+                textBuffer = "";
+                mode = "done";
+                foundEnd = true;
+                return;
+            }
+            return;
+        }
+    };
+    const command = [
+        `printf '\\n__BOSSCLI_BEGIN_%s__\\n' ${token}`,
+        `{ ${options.command}; }`,
+        "status=$?",
+        `printf '\\n__BOSSCLI_END_%s__:%s\\n' ${token} \"$status\"`,
+        "exit"
+    ].join("; ");
+    await options.client.streamInteractiveShell({
+        namespace: options.target.namespace,
+        pod: options.target.pod,
+        container: options.target.container,
+        inputLines: [command],
+        timeoutMs: options.timeoutMs,
+        onStdout: consumeStdout
+    });
+    if (!foundEnd) {
+        throw new Error("交互式 exec 没有收到结束标记");
+    }
+    return {
+        stdout: normalizeTerminalText(stdout),
+        exitStatus
+    };
 }
 export async function extractDependencyJars(appJarPath, libsDir) {
     const zip = await yauzl.openPromise(appJarPath, { lazyEntries: true });
@@ -323,6 +501,12 @@ function isLikelyAppArchive(filePath) {
 function isTransientExecError(error) {
     const message = error instanceof Error ? error.message : String(error);
     return /socket hang up|ECONNRESET|WebSocket was closed before the connection was established/i.test(message);
+}
+function stripTrailingExitZero(command) {
+    return command.replace(/\nexit 0\s*$/, "");
+}
+function normalizeTerminalText(text) {
+    return text.replace(/\r/g, "");
 }
 function delay(ms) {
     return new Promise((resolve) => {

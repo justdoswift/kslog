@@ -75,6 +75,16 @@ export interface StreamExecOptions extends ExecOptions {
   onErrorChannel?: (chunk: Buffer) => void | Promise<void>;
 }
 
+export interface InteractiveShellOptions {
+  namespace: string;
+  pod: string;
+  container: string;
+  inputLines: string[];
+  timeoutMs?: number;
+  sendDelayMs?: number;
+  onStdout?: (chunk: Buffer) => void | Promise<void>;
+}
+
 export interface SavedProfile {
   name: string;
   url: string;

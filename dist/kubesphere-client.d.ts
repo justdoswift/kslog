@@ -1,4 +1,4 @@
-import type { ClientOptions, DownloadLogOptions, ExecOptions, ExecResult, KubeServiceSummary, KubeTarget, LoginConfig, PodSummary, StreamExecOptions } from "./types.js";
+import type { ClientOptions, DownloadLogOptions, ExecOptions, ExecResult, InteractiveShellOptions, KubeServiceSummary, KubeTarget, LoginConfig, PodSummary, StreamExecOptions } from "./types.js";
 interface KubeObjectMeta {
     name?: string;
     namespace?: string;
@@ -25,12 +25,15 @@ export declare class KubeSphereClient {
     downloadLog(options: DownloadLogOptions): Promise<void>;
     execCommand(options: ExecOptions): Promise<ExecResult>;
     streamExecOutput(options: StreamExecOptions): Promise<void>;
+    streamInteractiveShell(options: InteractiveShellOptions): Promise<void>;
     private toPodSummary;
     private listPodsForDeployment;
     private fetchJson;
     private request;
     private buildExecWebSocketUrl;
+    private buildInteractiveShellWebSocketUrl;
     private handleExecMessage;
+    private handleInteractiveShellMessage;
     private storeCookies;
 }
 export declare function parseExecStatusError(payload: Buffer | string): string | undefined;

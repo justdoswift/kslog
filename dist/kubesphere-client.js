@@ -201,6 +201,8 @@ export class KubeSphereClient {
                 rejectUnauthorized: !this.insecure
             });
             let settled = false;
+            let finishing = false;
+            let messageChain = Promise.resolve();
             const fail = (error) => {
                 if (settled) {
                     return;
@@ -210,19 +212,84 @@ export class KubeSphereClient {
                 reject(error);
             };
             const finish = () => {
-                if (settled) {
+                if (settled || finishing) {
                     return;
                 }
-                settled = true;
+                finishing = true;
                 clearTimeout(timeout);
-                resolve();
+                messageChain
+                    .then(() => {
+                    settled = true;
+                    resolve();
+                })
+                    .catch(fail);
             };
             socket.on("error", fail);
             socket.on("unexpected-response", (_request, response) => {
                 fail(new Error(`exec WebSocket upgrade 失败：HTTP ${response.statusCode}`));
             });
             socket.on("message", (data) => {
-                void this.handleExecMessage(data, options).catch(fail);
+                messageChain = messageChain.then(() => this.handleExecMessage(data, options)).catch((error) => {
+                    fail(error);
+                });
+            });
+            socket.on("close", finish);
+        });
+    }
+    async streamInteractiveShell(options) {
+        const websocketUrl = this.buildInteractiveShellWebSocketUrl(options);
+        const cookieHeader = cookieHeaderFromJar(this.cookieJar);
+        await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                socket.terminate();
+                reject(new Error(`交互式 exec 超时：${options.timeoutMs ?? 600000}ms`));
+            }, options.timeoutMs ?? 600000);
+            const socket = new WebSocket(websocketUrl, "v4.channel.k8s.io", {
+                headers: cookieHeader ? { Cookie: cookieHeader } : undefined,
+                rejectUnauthorized: !this.insecure
+            });
+            let settled = false;
+            let finishing = false;
+            let messageChain = Promise.resolve();
+            const fail = (error) => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                clearTimeout(timeout);
+                reject(error);
+            };
+            const finish = () => {
+                if (settled || finishing) {
+                    return;
+                }
+                finishing = true;
+                clearTimeout(timeout);
+                messageChain
+                    .then(() => {
+                    settled = true;
+                    resolve();
+                })
+                    .catch(fail);
+            };
+            const sendInput = (text) => {
+                if (socket.readyState === WebSocket.OPEN) {
+                    socket.send(Buffer.concat([Buffer.from([0]), Buffer.from(text)]));
+                }
+            };
+            socket.on("open", () => {
+                void sendInteractiveLines(options.inputLines, options.sendDelayMs ?? 150, sendInput).catch(fail);
+            });
+            socket.on("error", fail);
+            socket.on("unexpected-response", (_request, response) => {
+                fail(new Error(`交互式 exec WebSocket upgrade 失败：HTTP ${response.statusCode}`));
+            });
+            socket.on("message", (data) => {
+                messageChain = messageChain
+                    .then(() => this.handleInteractiveShellMessage(data, options, sendInput))
+                    .catch((error) => {
+                    fail(error);
+                });
             });
             socket.on("close", finish);
         });
@@ -312,6 +379,20 @@ export class KubeSphereClient {
         url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
         return url.toString();
     }
+    buildInteractiveShellWebSocketUrl(options) {
+        const query = new URLSearchParams({
+            container: options.container,
+            stdout: "true",
+            stderr: "true",
+            stdin: "true",
+            tty: "true",
+            command: "sh"
+        });
+        const httpUrl = joinUrl(this.baseUrl, `/api/v1/namespaces/${encodeURIComponent(options.namespace)}/pods/${encodeURIComponent(options.pod)}/exec?${query.toString()}`);
+        const url = new URL(httpUrl);
+        url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+        return url.toString();
+    }
     async handleExecMessage(data, options) {
         const buffer = Buffer.isBuffer(data)
             ? data
@@ -338,6 +419,25 @@ export class KubeSphereClient {
             }
         }
     }
+    async handleInteractiveShellMessage(data, options, sendInput) {
+        const buffer = Buffer.isBuffer(data)
+            ? data
+            : Array.isArray(data)
+                ? Buffer.concat(data)
+                : Buffer.from(data);
+        if (buffer.length === 0) {
+            return;
+        }
+        const channel = buffer[0];
+        const payload = buffer.subarray(1);
+        if (channel !== 1) {
+            return;
+        }
+        if (payload.includes(Buffer.from("\x1b[6n"))) {
+            sendInput("\x1b[1;1R");
+        }
+        await options.onStdout?.(payload);
+    }
     async storeCookies(headers) {
         const getSetCookie = headers.getSetCookie;
         const setCookieHeaders = typeof getSetCookie === "function"
@@ -347,6 +447,18 @@ export class KubeSphereClient {
                 : [];
         mergeCookieJar(this.cookieJar, parseSetCookieHeaders(setCookieHeaders));
     }
+}
+async function sendInteractiveLines(inputLines, delayMs, sendInput) {
+    await delay(500);
+    for (const line of inputLines) {
+        sendInput(`${line}\n`);
+        await delay(delayMs);
+    }
+}
+function delay(ms) {
+    return new Promise((resolve) => {
+        setTimeout(resolve, ms);
+    });
 }
 export function parseExecStatusError(payload) {
     const text = Buffer.isBuffer(payload) ? payload.toString("utf8").trim() : payload.trim();
